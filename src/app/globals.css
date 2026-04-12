@@ -64,3 +64,20 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+
+@layer utilities {
+  .equipe-typing-dot {
+    animation: equipe-dot-opacity 1.2s ease-in-out infinite;
+  }
+}
+
+@keyframes equipe-dot-opacity {
+  0%,
+  60%,
+  100% {
+    opacity: 0.2;
+  }
+  30% {
+    opacity: 1;
+  }
+}

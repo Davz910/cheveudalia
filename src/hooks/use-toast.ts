@@ -7,10 +7,12 @@ const TOAST_REMOVE_DELAY = 5000;
 
 type ToasterToast = {
   id: string;
-  title?: string;
-  description?: string;
+  title?: React.ReactNode;
+  description?: React.ReactNode;
   action?: React.ReactNode;
   variant?: "default" | "destructive";
+  /** Durée d’affichage en ms (Radix Toast). */
+  duration?: number;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 };
