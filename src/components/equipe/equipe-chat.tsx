@@ -79,7 +79,35 @@ function safeFileName(name: string) {
   return name.replace(/[^\w.\-]+/g, "_").slice(0, 180);
 }
 
+/** Messages système d'appel Jitsi (texte en base) */
+const RE_APPEL_AUDIO = /^📞 APPEL_AUDIO:(.+)$/;
+const RE_APPEL_VIDEO = /^📹 APPEL_VIDEO:(.+)$/;
+
+type CallInviteKind = "audio" | "video";
+
+function parseCallInviteText(texte: string | null): { kind: CallInviteKind; convId: string } | null {
+  if (!texte) return null;
+  const t = texte.trim();
+  const a = RE_APPEL_AUDIO.exec(t);
+  if (a?.[1]) return { kind: "audio", convId: a[1].trim() };
+  const v = RE_APPEL_VIDEO.exec(t);
+  if (v?.[1]) return { kind: "video", convId: v[1].trim() };
+  return null;
+}
+
+function jitsiMeetUrl(convId: string, kind: CallInviteKind): string {
+  const room = `https://meet.jit.si/cheveudalia-${convId}`;
+  if (kind === "audio") {
+    return `${room}#config.startWithVideoMuted=true&config.startWithAudioMuted=false`;
+  }
+  return `${room}#config.startWithVideoMuted=false&config.startWithAudioMuted=false`;
+}
+
 function previewSnippet(msg: MessageRow): string {
+  const invite = parseCallInviteText(msg.texte);
+  if (invite) {
+    return invite.kind === "audio" ? "📞 Appel audio" : "📹 Appel vidéo";
+  }
   if (msg.fichier_url) {
     const n = msg.texte?.trim() || "fichier";
     return `Fichier : ${n}`.slice(0, 40);
@@ -129,6 +157,12 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
   const [previewByConv, setPreviewByConv] = useState<Record<string, MessageRow>>({});
   const [convIds, setConvIds] = useState<string[]>([]);
   const [typingPeers, setTypingPeers] = useState<{ user_id: string; prenom: string }[]>([]);
+  const [incomingCallBanner, setIncomingCallBanner] = useState<{
+    msgId: string;
+    kind: CallInviteKind;
+    prenom: string;
+    convId: string;
+  } | null>(null);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const msgChannelRef = useRef<RealtimeChannel | null>(null);
@@ -143,6 +177,10 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
   useEffect(() => {
     convRef.current = conv;
   }, [conv]);
+
+  useEffect(() => {
+    setIncomingCallBanner(null);
+  }, [conv?.convId]);
   useEffect(() => {
     membresRef.current = membres;
   }, [membres]);
@@ -264,6 +302,25 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
 
       const from = membresRef.current.find((x) => x.id === row.from_id);
       const prenom = from?.prenom ?? "Quelqu'un";
+      const invite = parseCallInviteText(row.texte);
+      if (invite) {
+        toast({
+          duration: 4000,
+          title: (
+            <div className="flex items-center gap-2">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-medium text-primary">
+                {from ? initials(from.prenom, from.nom) : "?"}
+              </span>
+              <span className="text-sm font-medium">
+                {prenom} vous invite à un appel {invite.kind === "audio" ? "audio" : "vidéo"}
+              </span>
+            </div>
+          ),
+          description: "Ouvrez la conversation pour rejoindre.",
+        });
+        return;
+      }
+
       const raw = row.fichier_url ? "Fichier joint" : (row.texte ?? "").replace(/\s+/g, " ").trim();
       const preview = raw.slice(0, 30);
 
@@ -473,7 +530,22 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
           table: "messages",
           filter: `conv_id=eq.${conv.convId}`,
         },
-        () => {
+        (payload: { eventType?: string; new?: Record<string, unknown> }) => {
+          if (payload.eventType === "INSERT" && payload.new) {
+            const row = payload.new as MessageRow;
+            if (row.from_id && row.from_id !== currentMembre.id) {
+              const inv = parseCallInviteText(row.texte);
+              if (inv) {
+                const from = membresRef.current.find((x) => x.id === row.from_id);
+                setIncomingCallBanner({
+                  msgId: row.id,
+                  kind: inv.kind,
+                  prenom: from?.prenom ?? "Quelqu'un",
+                  convId: inv.convId,
+                });
+              }
+            }
+          }
           void loadMessages(conv.convId);
         }
       )
@@ -484,7 +556,7 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
       void supabase.removeChannel(ch);
       msgChannelRef.current = null;
     };
-  }, [conv?.convId, conv, supabase, loadMessages]);
+  }, [conv?.convId, conv, supabase, loadMessages, currentMembre.id]);
 
   /* Marquer comme lu (dernier message vu) */
   useEffect(() => {
@@ -563,6 +635,23 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
     if (fileRef.current) fileRef.current.value = "";
   }
 
+  async function initiateCall(kind: CallInviteKind) {
+    if (!conv) return;
+    const texte =
+      kind === "audio" ? `📞 APPEL_AUDIO:${conv.convId}` : `📹 APPEL_VIDEO:${conv.convId}`;
+    const { error } = await supabase.from("messages").insert({
+      conv_id: conv.convId,
+      from_id: currentMembre.id,
+      texte,
+      fichier_url: null,
+    });
+    if (error) {
+      toast({ title: "Appel", description: error.message, variant: "destructive" });
+      return;
+    }
+    window.open(jitsiMeetUrl(conv.convId, kind), "_blank", "noopener,noreferrer");
+  }
+
   const sidebarMembers = useMemo(() => {
     if (!conv) return [];
     if (conv.kind === "dm") {
@@ -581,8 +670,6 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
     }
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   }
-
-  const jitsiUrl = conv ? `https://meet.jit.si/cheveudalia-${conv.convId}` : "";
 
   return (
     <div className="flex h-full min-h-0">
@@ -648,12 +735,9 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
             variant="outline"
             className="h-7 text-[11px]"
             disabled={!conv}
-            onClick={() =>
-              conv &&
-              window.open(`${jitsiUrl}#config.startWithVideoMuted=true`, "_blank", "noopener,noreferrer")
-            }
+            onClick={() => void initiateCall("audio")}
           >
-            📞 Appel
+            📞 Appel audio
           </Button>
           <Button
             type="button"
@@ -661,11 +745,50 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
             variant="outline"
             className="h-7 text-[11px]"
             disabled={!conv}
-            onClick={() => conv && window.open(jitsiUrl, "_blank", "noopener,noreferrer")}
+            onClick={() => void initiateCall("video")}
           >
             📹 Vidéo
           </Button>
         </div>
+
+        {incomingCallBanner ? (
+          <div className="border-b border-primary/15 bg-[hsl(336_56%_95%)] px-3.5 py-2.5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-[12px] leading-snug text-foreground">
+                <span className="font-medium">{incomingCallBanner.prenom}</span>
+                {incomingCallBanner.kind === "audio"
+                  ? " vous invite à rejoindre un appel audio"
+                  : " vous invite à rejoindre un appel vidéo"}
+              </p>
+              <div className="flex shrink-0 gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 bg-primary text-[11px] text-primary-foreground"
+                  onClick={() => {
+                    window.open(
+                      jitsiMeetUrl(incomingCallBanner.convId, incomingCallBanner.kind),
+                      "_blank",
+                      "noopener,noreferrer"
+                    );
+                    setIncomingCallBanner(null);
+                  }}
+                >
+                  Rejoindre
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-[11px]"
+                  onClick={() => setIncomingCallBanner(null)}
+                >
+                  Ignorer
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <ScrollArea className="min-h-0 flex-1 p-3">
           {!conv ? (
@@ -675,6 +798,17 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
           ) : (
             <div className="flex flex-col gap-2">
               {messages.map((msg) => {
+                const callInvite = !msg.fichier_url ? parseCallInviteText(msg.texte) : null;
+                if (callInvite) {
+                  return (
+                    <CallInviteMessageLine
+                      key={msg.id}
+                      msg={msg}
+                      currentMembreId={currentMembre.id}
+                      membres={membres}
+                    />
+                  );
+                }
                 const mine = msg.from_id === currentMembre.id;
                 const from = membres.find((x) => x.id === msg.from_id);
                 const label = from ? `${from.prenom} ${from.nom}` : "…";
@@ -818,6 +952,35 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
           )}
         </ScrollArea>
       </div>
+    </div>
+  );
+}
+
+function CallInviteMessageLine({
+  msg,
+  currentMembreId,
+  membres,
+}: {
+  msg: MessageRow;
+  currentMembreId: string;
+  membres: MembreRow[];
+}) {
+  const invite = parseCallInviteText(msg.texte);
+  if (!invite) return null;
+  const from = msg.from_id ? membres.find((x) => x.id === msg.from_id) : null;
+  const mine = msg.from_id === currentMembreId;
+  const kindFr = invite.kind === "audio" ? "audio" : "vidéo";
+  const line = mine
+    ? `Vous avez lancé un appel ${kindFr}`
+    : `${from?.prenom ?? "…"} a lancé un appel ${kindFr}`;
+  const time = formatShortTime(msg.created_at);
+  return (
+    <div className="w-full">
+      <Separator />
+      <p className="py-2 text-center text-[11px] italic text-muted-foreground">
+        {line} — {time}
+      </p>
+      <Separator />
     </div>
   );
 }
