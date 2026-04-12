@@ -49,7 +49,7 @@ const NAV: {
     items: [
       { href: "/dashboard/equipe", label: "Équipe & chat", key: "equipe", icon: "chat_bubble" },
       { href: "/dashboard/finances", label: "Finances P&L", key: "finances", icon: "account_balance" },
-      { href: "/dashboard/assistant", label: "Assistant IA ✦", key: "assistant", icon: "robot_2" },
+      { href: "/dashboard/assistant", label: "Assistant IA ✦", key: "assistant", icon: "smart_toy" },
       { href: "/dashboard/projets", label: "Projets", key: "projets", icon: "folder_open" },
     ],
   },
