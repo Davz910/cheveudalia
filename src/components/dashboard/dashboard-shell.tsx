@@ -188,13 +188,13 @@ export function DashboardShell({
                 const active =
                   item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
                 const linkClass = cn(
-                  "group mb-px flex cursor-pointer items-center gap-2 rounded-md py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                  "group mb-px flex cursor-pointer items-center gap-2 rounded-md py-1 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
                   sidebarCollapsed ? "justify-center px-1.5" : "px-3",
                   active && "bg-[hsl(336_56%_95%)] font-medium text-[hsl(336_45%_35%)]",
                   !active && "font-normal"
                 );
                 const iconClass = cn(
-                  "material-icons shrink-0 select-none text-[20px] leading-none",
+                  "material-icons shrink-0 select-none text-[18px] leading-none",
                   active ? "text-[#D4537E]" : "text-muted-foreground group-hover:text-foreground"
                 );
                 const linkInner = (
@@ -251,7 +251,7 @@ export function DashboardShell({
             onClick={toggleSidebar}
             aria-label={sidebarCollapsed ? "Développer la navigation" : "Réduire la navigation"}
           >
-            <span className="material-icons text-[20px] leading-none">
+            <span className="material-icons text-[18px] leading-none">
               {sidebarCollapsed ? "chevron_right" : "chevron_left"}
             </span>
           </Button>
