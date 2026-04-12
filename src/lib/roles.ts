@@ -93,6 +93,66 @@ export function roleAllowsModule(role: Role, module: ModuleKey): boolean {
   return m.includes(module);
 }
 
+/** Libellés pour les toggles de permissions (module Membres & RH) */
+export const MODULE_PERMISSION_LABELS: Record<ModuleKey, string> = {
+  dashboard: "Dashboard",
+  commandes: "Commandes",
+  produits: "Produits & stocks",
+  clients: "Clients CRM",
+  sav: "SAV",
+  logistique: "Logistique",
+  marketing: "Marketing",
+  contenus: "Contenus & CM",
+  influenceurs: "Influenceurs & UGC",
+  equipe: "Équipe & chat",
+  finances: "Finances P&L",
+  assistant: "Assistant IA",
+  projets: "Projets",
+  membres: "Membres & RH",
+  configuration: "Configuration",
+};
+
+export const PERMISSION_MODULE_KEYS: ModuleKey[] = [
+  "dashboard",
+  "commandes",
+  "produits",
+  "clients",
+  "sav",
+  "logistique",
+  "marketing",
+  "contenus",
+  "influenceurs",
+  "equipe",
+  "finances",
+  "assistant",
+  "projets",
+  "membres",
+  "configuration",
+];
+
+/** Objet permissions par défaut aligné sur le rôle (tous les modules explicites). */
+export function defaultPermissionsForRole(role: Role): Record<ModuleKey, boolean> {
+  const out = {} as Record<ModuleKey, boolean>;
+  for (const key of PERMISSION_MODULE_KEYS) {
+    out[key] = roleAllowsModule(role, key);
+  }
+  return out;
+}
+
+/** Accès à un module : JSON permissions prioritaire sur les clés définies, sinon rôle. Le gérant a tout. */
+export function moduleAllowed(
+  role: Role,
+  module: ModuleKey,
+  permissions: Record<string, unknown> | null | undefined
+): boolean {
+  if (role === "gerant") return true;
+  if (permissions && typeof permissions === "object" && !Array.isArray(permissions)) {
+    const v = permissions[module];
+    if (typeof v === "boolean") return v;
+  }
+  return roleAllowsModule(role, module);
+}
+
 /** Première route dashboard après connexion */
 export function defaultDashboardPath(role: Role): string {
   switch (role) {

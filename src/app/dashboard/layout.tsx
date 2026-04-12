@@ -10,7 +10,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   return (
-    <ModuleAccessGuard role={membre.role}>
+    <ModuleAccessGuard role={membre.role} permissions={membre.permissions}>
       <DashboardShell
         membre={{
           id: membre.id,
