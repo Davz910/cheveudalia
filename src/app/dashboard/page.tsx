@@ -9,10 +9,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DashboardAgenda } from "@/components/dashboard/dashboard-agenda";
+import { DashboardWelcome } from "@/components/dashboard/dashboard-welcome";
+import { getSessionMembre } from "@/lib/auth/membre";
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const membre = await getSessionMembre();
+
   return (
     <div className="h-full overflow-y-auto px-4 py-4 md:px-5 md:py-[18px]">
+      {membre ? <DashboardWelcome prenom={membre.prenom} membreId={membre.id} /> : null}
       <div className="mb-[18px] grid grid-cols-2 gap-2.5 md:grid-cols-4">
         <Card className="border-border/80 py-3.5">
           <div className="px-4">

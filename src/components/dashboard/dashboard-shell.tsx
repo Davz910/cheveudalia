@@ -67,8 +67,6 @@ const NAV: {
   },
 ];
 
-const ROLE_TABS: Role[] = ["gerant", "sav", "logistique", "marketing", "cm"];
-
 function initials(prenom: string, nom: string) {
   const a = prenom?.[0] ?? "";
   const b = nom?.[0] ?? "";
@@ -382,21 +380,6 @@ export function DashboardShell({
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[hsl(60_5%_96%)]">
-        <div className="hidden shrink-0 gap-0.5 border-b border-border bg-card px-5 pt-2.5 md:flex">
-          {ROLE_TABS.map((r) => (
-            <div
-              key={r}
-              className={cn(
-                "cursor-default border-b-2 border-transparent px-3.5 pb-2 text-xs",
-                membre.role === r
-                  ? "border-primary font-medium text-primary"
-                  : "text-muted-foreground"
-              )}
-            >
-              {ROLE_LABELS[r]}
-            </div>
-          ))}
-        </div>
         <header className="relative flex h-[52px] shrink-0 items-center gap-2 border-b border-border bg-card px-3 md:gap-3 md:px-5">
           <Button
             type="button"
