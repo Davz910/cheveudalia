@@ -14,6 +14,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fr">
+      <head>
+        <link
+          href="https://fonts.googleapis.com/icon?family=Material+Icons"
+          rel="stylesheet"
+        />
+      </head>
       <body className="min-h-screen bg-background font-sans">
         <Providers>{children}</Providers>
       </body>
