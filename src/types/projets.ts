@@ -32,7 +32,7 @@ export type ProjetRow = {
   id: string;
   nom: string;
   icon: string | null;
-  desc: string | null;
+  description: string | null;
   marche: string | null;
   deadline: string | null;
   statut: string | null;

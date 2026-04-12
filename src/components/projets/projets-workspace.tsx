@@ -392,7 +392,7 @@ export function ProjetsWorkspace({
     const { error } = await supabase.from("projets").insert({
       nom: payload.nom,
       icon: payload.icon || null,
-      desc: payload.desc || null,
+      description: payload.desc || null,
       marche: payload.marche || null,
       deadline: payload.deadline || null,
       color: payload.color || null,
@@ -588,7 +588,9 @@ export function ProjetsWorkspace({
                 <Progress value={selected.progress ?? 0} className="h-2 max-w-[200px]" />
                 <span className="text-xs text-muted-foreground">{selected.progress ?? 0}%</span>
               </div>
-              {selected.desc ? <p className="mt-2 text-xs text-muted-foreground">{selected.desc}</p> : null}
+              {selected.description ? (
+                <p className="mt-2 text-xs text-muted-foreground">{selected.description}</p>
+              ) : null}
               <div className="mt-2 flex flex-wrap gap-2">
                 <span className="text-[11px] text-muted-foreground">Membres :</span>
                 {projectMembers.map((m) => (
