@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { Paperclip } from "lucide-react";
 
 type MembreRow = {
@@ -163,6 +164,8 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
     prenom: string;
     convId: string;
   } | null>(null);
+  const [mobileChatOpen, setMobileChatOpen] = useState(false);
+  const isMd = useMediaQuery("(min-width: 768px)");
 
   const fileRef = useRef<HTMLInputElement>(null);
   const msgChannelRef = useRef<RealtimeChannel | null>(null);
@@ -181,6 +184,10 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
   useEffect(() => {
     setIncomingCallBanner(null);
   }, [conv?.convId]);
+
+  useEffect(() => {
+    if (isMd) setMobileChatOpen(false);
+  }, [isMd]);
   useEffect(() => {
     membresRef.current = membres;
   }, [membres]);
@@ -577,6 +584,9 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
       label: `${peer.prenom} ${peer.nom}`.trim(),
       peer,
     });
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+      setMobileChatOpen(true);
+    }
   }
 
   function selectProject(p: ProjetRow) {
@@ -586,6 +596,9 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
       label: p.icon ? `${p.icon} ${p.nom}` : p.nom,
       projet: p,
     });
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+      setMobileChatOpen(true);
+    }
   }
 
   async function sendText() {
@@ -671,9 +684,17 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   }
 
+  const showMobileList = isMd || !conv || !mobileChatOpen;
+  const showMobileChatPane = isMd || (!!conv && mobileChatOpen);
+
   return (
     <div className="flex h-full min-h-0">
-      <div className="flex w-[260px] shrink-0 flex-col border-r border-border bg-card">
+      <div
+        className={cn(
+          "flex w-full shrink-0 flex-col border-r border-border bg-card md:w-[260px]",
+          !showMobileList && "hidden"
+        )}
+      >
         <div className="border-b border-border px-3.5 py-2.5">
           <span className="text-[13px] font-medium">Messagerie</span>
           <p className="mt-1 text-[10px] text-muted-foreground">DM + groupes projets</p>
@@ -726,8 +747,22 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
         </ScrollArea>
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col bg-card">
+      <div className={cn("flex min-w-0 flex-1 flex-col bg-card", !showMobileChatPane && "hidden")}>
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-3.5 py-2">
+          {!isMd && conv ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 shrink-0 px-2 text-xs"
+              onClick={() => {
+                setConv(null);
+                setMobileChatOpen(false);
+              }}
+            >
+              ← Retour
+            </Button>
+          ) : null}
           <span className="min-w-0 flex-1 truncate text-sm font-medium">{conv?.label ?? "Conversation"}</span>
           <Button
             type="button"
@@ -920,7 +955,7 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
         </div>
       </div>
 
-      <div className="flex w-[210px] shrink-0 flex-col border-l border-border bg-card">
+      <div className="hidden w-[210px] shrink-0 flex-col border-l border-border bg-card md:flex">
         <div className="border-b border-border px-3.5 py-2.5">
           <span className="text-[13px] font-medium">Membres</span>
         </div>

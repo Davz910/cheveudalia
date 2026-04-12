@@ -638,7 +638,7 @@ function MembreDetail({
               <CardTitle>Profil</CardTitle>
               <CardDescription>Identité et rôle</CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-2">
+            <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label>Prénom</Label>
                 <Input value={profil.prenom} onChange={(e) => setProfil((p) => ({ ...p, prenom: e.target.value }))} />
@@ -806,7 +806,7 @@ function MembreDetail({
             <CardHeader>
               <CardTitle>Contrat & rémunération</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-2">
+            <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="grid gap-1.5 sm:col-span-2">
                 <Label>Type de contrat</Label>
                 <Select value={rh.contrat || "none"} onValueChange={(v) => setRh((r) => ({ ...r, contrat: v === "none" ? "" : v }))}>

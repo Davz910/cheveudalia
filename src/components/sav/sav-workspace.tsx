@@ -14,7 +14,9 @@ import {
 import { cn } from "@/lib/utils";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/sav/rich-text-editor";
 import { SavNewTicketDialog } from "@/components/sav/sav-new-ticket-dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { parseMsgs, type SavMsg, type TicketSavRow } from "@/types/sav";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { showUnassignedEmailAlert } from "@/lib/sav/paris-hours";
 import { useToast } from "@/hooks/use-toast";
 
@@ -74,6 +76,9 @@ export function SavWorkspace({
   const [signatureHtml, setSignatureHtml] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
   const [sending, setSending] = useState(false);
+  const [mobileConvOpen, setMobileConvOpen] = useState(false);
+  const [clientSheetOpen, setClientSheetOpen] = useState(false);
+  const isMd = useMediaQuery("(min-width: 768px)");
   /** Recalcul périodique du badge 2h+ (sans attendre un événement Realtime). */
   const [, setAlertTick] = useState(0);
 
@@ -111,6 +116,10 @@ export function SavWorkspace({
   useEffect(() => {
     loadTickets();
   }, [loadTickets]);
+
+  useEffect(() => {
+    if (isMd) setMobileConvOpen(false);
+  }, [isMd]);
 
   useEffect(() => {
     const id = setInterval(() => setAlertTick((n) => n + 1), 60_000);
@@ -290,6 +299,45 @@ export function SavWorkspace({
 
   const msgs = parseMsgs(selected?.msgs);
 
+  const clientFicheBody =
+    !selected?.client_email ? (
+      <p className="text-muted-foreground">Pas d’email sur ce ticket.</p>
+    ) : !clientFiche ? (
+      <p className="text-muted-foreground">Aucun client trouvé pour {selected.client_email}</p>
+    ) : (
+      <div className="space-y-3">
+        <div>
+          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Identité</div>
+          <div className="font-medium">
+            {clientFiche.prenom} {clientFiche.nom}
+          </div>
+          <div className="text-muted-foreground">{clientFiche.email}</div>
+          {clientFiche.tel ? <div className="text-muted-foreground">{clientFiche.tel}</div> : null}
+        </div>
+        <div>
+          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Marché</div>
+          <div>{clientFiche.marche ?? "—"}</div>
+        </div>
+        <div>
+          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Stats</div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Commandes</span>
+            <span className="font-medium">{clientFiche.cmds ?? 0}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Total dépensé</span>
+            <span className="font-medium">{clientFiche.total_depense ?? 0} €</span>
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Historique</div>
+          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 p-2 text-[10px]">
+            {JSON.stringify(clientFiche.historique ?? [], null, 2)}
+          </pre>
+        </div>
+      </div>
+    );
+
   return (<div className="flex h-full min-h-0 flex-col bg-card">
       <div className="flex shrink-0 items-center justify-end gap-2 border-b border-border px-3 py-2">
         <Button
@@ -340,8 +388,13 @@ export function SavWorkspace({
           }
           return (
             <div className="flex min-h-0 flex-1">
-        <div className="flex w-[240px] shrink-0 flex-col border-r border-border">
-          <div className="grid grid-cols-4 border-b border-border">
+        <div
+          className={cn(
+            "flex w-full shrink-0 flex-col border-r border-border md:w-[240px]",
+            mobileConvOpen && "hidden md:flex"
+          )}
+        >
+          <div className="grid grid-cols-2 border-b border-border sm:grid-cols-4">
             {(
               [
                 ["recus", "📥", "Reçus"],
@@ -410,7 +463,12 @@ export function SavWorkspace({
                     <button
                       key={t.id}
                       type="button"
-                      onClick={() => setSelectedId(t.id)}
+                      onClick={() => {
+                        setSelectedId(t.id);
+                        if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+                          setMobileConvOpen(true);
+                        }
+                      }}
                       className={cn(
                         "mb-px w-full rounded-md border border-transparent px-2.5 py-2.5 text-left text-xs transition-colors hover:bg-muted",
                         active && "border-primary/20 bg-[hsl(336_56%_95%)]"
@@ -445,9 +503,24 @@ export function SavWorkspace({
           </ScrollArea>
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col border-r border-border">
-          <div className="flex items-center justify-between border-b border-border px-3.5 py-2.5">
-            <div className="min-w-0">
+        <div
+          className={cn(
+            "flex min-w-0 flex-1 flex-col border-r border-border",
+            !mobileConvOpen && "hidden md:flex"
+          )}
+        >
+          <div className="flex items-center justify-between gap-2 border-b border-border px-3.5 py-2.5">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 shrink-0 px-2 text-xs md:hidden"
+                onClick={() => setMobileConvOpen(false)}
+              >
+                ← Retour
+              </Button>
+              <div className="min-w-0">
               <div className="truncate text-sm font-medium">{selected?.sujet ?? "Conversation"}</div>
               {selected ? (
                 <div className="truncate text-[10px] text-muted-foreground">
@@ -455,8 +528,19 @@ export function SavWorkspace({
                   {new Date(selected.updated_at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}
                 </div>
               ) : null}
+              </div>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-[11px] md:hidden"
+                disabled={!selected?.client_email}
+                onClick={() => setClientSheetOpen(true)}
+              >
+                Voir fiche
+              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="sm" variant="outline" className="h-7 text-[11px]" disabled={!canMutate || !selected}>
@@ -607,51 +691,26 @@ export function SavWorkspace({
           </div>
         </div>
 
-        <div className="flex w-[200px] shrink-0 flex-col">
+        <div className="hidden w-[200px] shrink-0 flex-col md:flex">
           <div className="flex items-center justify-between border-b border-border px-3.5 py-2.5">
-            <span className="text-sm font-medium">Fiche client</span>
+            <span className="truncate text-sm font-medium">Fiche client</span>
             <Badge variant="pink">CRM</Badge>
           </div>
           <ScrollArea className="min-h-0 flex-1 p-3 text-xs">
-            {!selected?.client_email ? (
-              <p className="text-muted-foreground">Pas d’email sur ce ticket.</p>
-            ) : !clientFiche ? (
-              <p className="text-muted-foreground">Aucun client trouvé pour {selected.client_email}</p>
-            ) : (
-              <div className="space-y-3">
-                <div>
-                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Identité</div>
-                  <div className="font-medium">
-                    {clientFiche.prenom} {clientFiche.nom}
-                  </div>
-                  <div className="text-muted-foreground">{clientFiche.email}</div>
-                  {clientFiche.tel ? <div className="text-muted-foreground">{clientFiche.tel}</div> : null}
-                </div>
-                <div>
-                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Marché</div>
-                  <div>{clientFiche.marche ?? "—"}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Stats</div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Commandes</span>
-                    <span className="font-medium">{clientFiche.cmds ?? 0}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Total dépensé</span>
-                    <span className="font-medium">{clientFiche.total_depense ?? 0} €</span>
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Historique</div>
-                  <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 p-2 text-[10px]">
-                    {JSON.stringify(clientFiche.historique ?? [], null, 2)}
-                  </pre>
-                </div>
-              </div>
-            )}
+            {clientFicheBody}
           </ScrollArea>
         </div>
+
+        <Sheet open={clientSheetOpen} onOpenChange={setClientSheetOpen}>
+          <SheetContent side="right" className="flex w-[min(100vw,360px)] flex-col gap-0 p-0 sm:max-w-md">
+            <SheetHeader className="border-b border-border px-4 py-3 text-left">
+              <SheetTitle className="text-base">Fiche client</SheetTitle>
+            </SheetHeader>
+            <ScrollArea className="min-h-0 flex-1 p-4 text-xs">
+              {clientFicheBody}
+            </ScrollArea>
+          </SheetContent>
+        </Sheet>
       </div>
           );
         })()}

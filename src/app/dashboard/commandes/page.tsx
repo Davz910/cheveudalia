@@ -87,8 +87,8 @@ export default function CommandesPage() {
     });
 
   return (
-    <div className="h-full overflow-y-auto px-5 py-4">
-      <div className="mb-4 grid grid-cols-4 gap-2.5">
+    <div className="h-full overflow-y-auto px-4 py-4 md:px-5">
+      <div className="mb-4 grid grid-cols-2 gap-2.5 md:grid-cols-4">
         <Card className="border-border/80 py-3">
           <CardHeader className="p-4 pb-2">
             <CardTitle className="text-[11px] font-normal text-muted-foreground">Commandes du jour</CardTitle>
@@ -158,6 +158,7 @@ export default function CommandesPage() {
           </div>
         </CardHeader>
         <CardContent>
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               {table.getHeaderGroups().map((hg) => (
@@ -182,6 +183,7 @@ export default function CommandesPage() {
               ))}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

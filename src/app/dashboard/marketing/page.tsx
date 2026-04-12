@@ -4,8 +4,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 export default function MarketingPage() {
   return (
-    <div className="h-full overflow-y-auto px-5 py-4">
-      <div className="mb-4 grid grid-cols-4 gap-2.5">
+    <div className="h-full overflow-y-auto px-4 py-4 md:px-5">
+      <div className="mb-4 grid grid-cols-2 gap-2.5 md:grid-cols-4">
         {[
           ["ROAS global", "3,8x", "+0.3 vs mois dernier"],
           ["Emails envoyés", "8 400", "Taux ouv. 34%"],
@@ -28,6 +28,7 @@ export default function MarketingPage() {
           <CardTitle className="text-[13px] font-medium">Campagnes actives</CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -48,6 +49,7 @@ export default function MarketingPage() {
               </TableRow>
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

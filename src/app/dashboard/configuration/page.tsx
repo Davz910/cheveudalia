@@ -15,7 +15,7 @@ const SECTIONS = [
 export default function ConfigurationPage() {
   return (
     <div className="h-full overflow-y-auto px-5 py-4">
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {SECTIONS.map((s) => (
           <Card key={s} className="border-border/80 p-4">
             <div className="text-[13px] font-medium">{s}</div>

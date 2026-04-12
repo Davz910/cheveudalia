@@ -12,8 +12,8 @@ import { DashboardAgenda } from "@/components/dashboard/dashboard-agenda";
 
 export default function DashboardPage() {
   return (
-    <div className="h-full overflow-y-auto px-5 py-[18px]">
-      <div className="mb-[18px] grid grid-cols-4 gap-2.5">
+    <div className="h-full overflow-y-auto px-4 py-4 md:px-5 md:py-[18px]">
+      <div className="mb-[18px] grid grid-cols-2 gap-2.5 md:grid-cols-4">
         <Card className="border-border/80 py-3.5">
           <div className="px-4">
             <div className="mb-1.5 text-[11px] text-muted-foreground">CA du mois</div>
@@ -44,16 +44,17 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="mb-3 grid grid-cols-[340px_1fr] gap-3">
+      <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-[340px_1fr]">
         <DashboardAgenda />
 
-        <div className="flex flex-col gap-3">
-          <Card className="border-border/80">
+        <div className="flex min-w-0 flex-col gap-3">
+          <Card className="min-w-0 border-border/80">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3 pt-4">
-              <CardTitle className="text-[13px] font-medium">Dernières commandes</CardTitle>
-              <span className="cursor-pointer text-[11px] text-primary">Voir tout →</span>
+              <CardTitle className="truncate text-[13px] font-medium">Dernières commandes</CardTitle>
+              <span className="shrink-0 cursor-pointer text-[11px] text-primary">Voir tout →</span>
             </CardHeader>
             <CardContent className="pb-4 pt-0">
+              <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
@@ -99,6 +100,7 @@ export default function DashboardPage() {
                   ))}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
 
@@ -124,7 +126,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <Card className="border-border/80">
           <CardHeader className="pb-3 pt-4">
             <CardTitle className="text-[13px] font-medium">Répartition marchés</CardTitle>

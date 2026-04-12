@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -19,6 +18,9 @@ import type { ModuleKey, Role } from "@/lib/roles";
 import { ROLE_LABELS, modulesForRole } from "@/lib/roles";
 import { logoutAction } from "@/app/actions/auth";
 import { NotificationBell } from "@/components/dashboard/notification-bell";
+import { SidebarNavItems } from "@/components/dashboard/sidebar-nav-items";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Menu } from "lucide-react";
 
 const SIDEBAR_COLLAPSED_KEY = "cheveudalia-dashboard-sidebar-collapsed";
 
@@ -118,6 +120,11 @@ export function DashboardShell({
     "Vue générale";
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     try {
@@ -192,9 +199,67 @@ export function DashboardShell({
 
   return (
     <div className="flex h-screen overflow-hidden">
+      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <SheetContent
+          side="left"
+          className="flex w-[min(100vw,280px)] max-w-[90vw] flex-col gap-0 overflow-hidden border-r bg-card p-0"
+        >
+          <div className="flex shrink-0 items-center gap-2.5 border-b border-border p-4">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground">
+              C
+            </div>
+            <div className="min-w-0">
+              <div className="text-[13px] font-medium leading-tight">Cheveudalia</div>
+              <div className="text-[11px] text-muted-foreground">Espace de gestion</div>
+            </div>
+          </div>
+          <div className="m-2.5">
+            <Select defaultValue="fr">
+              <SelectTrigger className="h-9 text-xs">
+                <SelectValue placeholder="Marché" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="fr">🇫🇷 France</SelectItem>
+                <SelectItem value="de">🇩🇪 Allemagne</SelectItem>
+                <SelectItem value="it">🇮🇹 Italie</SelectItem>
+                <SelectItem value="all">🌍 Tous les marchés</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <nav className="flex min-h-0 flex-1 flex-col overflow-y-auto px-1.5 pb-2">
+            <SidebarNavItems
+              pathname={pathname}
+              visibleNav={visibleNav}
+              sidebarCollapsed={false}
+              equipeUnreadCount={equipeUnreadCount}
+              onEquipeNav={markEquipeNotificationsRead}
+              onNavigate={() => setMobileNavOpen(false)}
+            />
+          </nav>
+          <form action={logoutAction} className="mt-auto border-t border-border p-2.5">
+            <button
+              type="submit"
+              className="flex w-full cursor-pointer items-center gap-2 rounded-md p-1.5 text-left hover:bg-muted"
+            >
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-medium text-primary-foreground">
+                {initials(membre.prenom, membre.nom)}
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-xs font-medium">
+                  {membre.prenom} {membre.nom.charAt(0)}.
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  {ROLE_LABELS[membre.role]} · Déconnexion
+                </div>
+              </div>
+            </button>
+          </form>
+        </SheetContent>
+      </Sheet>
+
       <aside
         className={cn(
-          "flex shrink-0 flex-col overflow-hidden border-r border-border bg-card transition-[width] duration-200 ease-in-out",
+          "hidden shrink-0 flex-col overflow-hidden border-r border-border bg-card transition-[width] duration-200 ease-in-out md:flex",
           sidebarCollapsed ? "w-[52px]" : "w-[220px]"
         )}
       >
@@ -230,102 +295,13 @@ export function DashboardShell({
           </div>
         ) : null}
         <nav className="flex min-h-0 flex-1 flex-col overflow-y-auto px-1.5 pb-2">
-          {visibleNav.map((group) => (
-            <div key={group.section} className="mt-1.5">
-              {!sidebarCollapsed ? (
-                <div className="px-2.5 pb-0.5 pt-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
-                  {group.section}
-                </div>
-              ) : null}
-              {group.items.map((item) => {
-                const active =
-                  item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
-                const isEquipe = item.key === "equipe";
-                const equipeHasUnread = isEquipe && equipeUnreadCount > 0;
-                const equipeIcon = equipeHasUnread ? "mark_chat_unread" : "chat_bubble";
-                const linkClass = cn(
-                  "group mb-px flex cursor-pointer items-center gap-2 rounded-md py-1 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-                  sidebarCollapsed ? "justify-center px-1.5" : "px-3",
-                  active && "bg-[hsl(336_56%_95%)] font-medium text-[hsl(336_45%_35%)]",
-                  !active && "font-normal"
-                );
-                const iconClass = cn(
-                  "material-icons shrink-0 select-none text-[14px] leading-none",
-                  isEquipe && equipeHasUnread
-                    ? "text-[#D4537E]"
-                    : active
-                      ? "text-[#D4537E]"
-                      : "text-muted-foreground group-hover:text-foreground"
-                );
-                const onNavClick = isEquipe ? () => void markEquipeNotificationsRead() : undefined;
-                const linkInner = (
-                  <>
-                    {isEquipe ? (
-                      <span className="relative inline-flex shrink-0">
-                        <span className={iconClass} aria-hidden>
-                          {equipeIcon}
-                        </span>
-                        {equipeHasUnread ? (
-                          <span className="pointer-events-none absolute -right-1.5 -top-1 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-red-600 px-0.5 text-[8px] font-bold leading-none text-white">
-                            {equipeUnreadCount > 99 ? "99+" : equipeUnreadCount}
-                          </span>
-                        ) : null}
-                      </span>
-                    ) : (
-                      <span className={iconClass} aria-hidden>
-                        {item.icon}
-                      </span>
-                    )}
-                    {!sidebarCollapsed ? (
-                      <>
-                        <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                        {item.badge != null ? (
-                          <span className="shrink-0 rounded-full bg-primary px-1.5 text-[10px] font-medium text-primary-foreground">
-                            {item.badge}
-                          </span>
-                        ) : null}
-                      </>
-                    ) : null}
-                  </>
-                );
-                const linkLabel =
-                  isEquipe && equipeHasUnread
-                    ? `${item.label} (${equipeUnreadCount} non ${equipeUnreadCount > 1 ? "lus" : "lu"})`
-                    : item.label;
-                const a11yLabel = sidebarCollapsed || (isEquipe && equipeHasUnread) ? linkLabel : undefined;
-                if (sidebarCollapsed) {
-                  return (
-                    <Tooltip key={item.href}>
-                      <TooltipTrigger asChild>
-                        <Link
-                          href={item.href}
-                          className={linkClass}
-                          onClick={onNavClick}
-                          aria-label={a11yLabel}
-                        >
-                          {linkInner}
-                        </Link>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" sideOffset={8}>
-                        {linkLabel}
-                      </TooltipContent>
-                    </Tooltip>
-                  );
-                }
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={linkClass}
-                    onClick={onNavClick}
-                    aria-label={a11yLabel}
-                  >
-                    {linkInner}
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
+          <SidebarNavItems
+            pathname={pathname}
+            visibleNav={visibleNav}
+            sidebarCollapsed={sidebarCollapsed}
+            equipeUnreadCount={equipeUnreadCount}
+            onEquipeNav={markEquipeNotificationsRead}
+          />
         </nav>
         <div
           className={cn(
@@ -388,7 +364,7 @@ export function DashboardShell({
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[hsl(60_5%_96%)]">
-        <div className="flex shrink-0 gap-0.5 border-b border-border bg-card px-5 pt-2.5">
+        <div className="hidden shrink-0 gap-0.5 border-b border-border bg-card px-5 pt-2.5 md:flex">
           {ROLE_TABS.map((r) => (
             <div
               key={r}
@@ -403,20 +379,40 @@ export function DashboardShell({
             </div>
           ))}
         </div>
-        <header className="flex h-[52px] shrink-0 items-center gap-3 border-b border-border bg-card px-5">
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <header className="relative flex h-[52px] shrink-0 items-center gap-2 border-b border-border bg-card px-3 md:gap-3 md:px-5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="relative z-10 h-9 shrink-0 md:hidden"
+            aria-label="Ouvrir le menu"
+            onClick={() => setMobileNavOpen(true)}
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center md:hidden">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground">
+              C
+            </div>
+          </div>
+          <div className="hidden min-w-0 flex-1 flex-col gap-0.5 md:flex">
             <div className="truncate text-[15px] font-medium">{resolvedTitle}</div>
           </div>
-          <Badge variant="pink" className="font-medium">
-            {marketLabel}
-          </Badge>
-          <Button variant="outline" size="sm" className="h-8 text-xs">
-            Exporter
-          </Button>
-          <Button size="sm" className="h-8 bg-primary text-xs text-primary-foreground hover:bg-primary/90">
-            + Nouvelle action
-          </Button>
-          <NotificationBell />
+          <div className="relative z-10 ml-auto flex shrink-0 items-center gap-2 md:gap-3">
+            <Badge variant="pink" className="hidden font-medium md:inline-flex">
+              {marketLabel}
+            </Badge>
+            <Button variant="outline" size="sm" className="hidden h-8 text-xs md:inline-flex">
+              Exporter
+            </Button>
+            <Button
+              size="sm"
+              className="hidden h-8 bg-primary text-xs text-primary-foreground hover:bg-primary/90 md:inline-flex"
+            >
+              + Nouvelle action
+            </Button>
+            <NotificationBell />
+          </div>
         </header>
         <div className="flex-1 overflow-hidden">{children}</div>
       </main>

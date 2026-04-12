@@ -93,7 +93,7 @@ function DroppableCol({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex min-h-[320px] flex-1 flex-col rounded-lg border border-border bg-card/50",
+        "flex min-h-[320px] min-w-[260px] max-w-[88vw] shrink-0 flex-col rounded-lg border border-border bg-card/50 md:max-w-none md:flex-1",
         isOver && "ring-2 ring-primary/40"
       )}
     >
@@ -528,8 +528,8 @@ export function ProjetsWorkspace({
   }
 
   return (
-    <div className="flex h-full min-h-0">
-      <div className="flex w-[220px] shrink-0 flex-col border-r border-border bg-card">
+    <div className="flex h-full min-h-0 flex-col md:flex-row">
+      <div className="hidden w-[220px] shrink-0 flex-col border-r border-border bg-card md:flex">
         <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
           <span className="text-[13px] font-medium">Projets</span>
           <Button type="button" size="sm" className="h-7 bg-primary px-2 text-[11px]" onClick={() => setCreateOpen(true)}>
@@ -574,15 +574,44 @@ export function ProjetsWorkspace({
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[hsl(60_5%_96%)]">
+        <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-card p-2 md:hidden">
+          <Select
+            value={selected?.id ?? ""}
+            onValueChange={(v) => {
+              const p = projets.find((x) => x.id === v);
+              if (p) selectProjet(p);
+            }}
+          >
+            <SelectTrigger className="h-9 w-full text-xs">
+              <SelectValue placeholder="Choisir un projet" />
+            </SelectTrigger>
+            <SelectContent>
+              {projets.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {(p.icon ?? "📁") + " " + p.nom}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            size="sm"
+            className="h-8 w-full bg-primary text-[11px] text-primary-foreground"
+            onClick={() => setCreateOpen(true)}
+          >
+            <Plus className="mr-1 h-3 w-3" />
+            Nouveau projet
+          </Button>
+        </div>
         {!selected ? (
-          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+          <div className="flex flex-1 items-center justify-center px-4 text-center text-sm text-muted-foreground">
             Sélectionnez un projet
           </div>
         ) : (
           <>
             <div className="border-b border-border bg-card px-4 py-3">
               <div className="flex flex-wrap items-center gap-3">
-                <span className="text-lg font-medium">
+                <span className="truncate text-lg font-medium">
                   {selected.icon} {selected.nom}
                 </span>
                 <Progress value={selected.progress ?? 0} className="h-2 max-w-[200px]" />
@@ -610,13 +639,14 @@ export function ProjetsWorkspace({
                   Fichiers
                 </TabsTrigger>
               </TabsList>
-              <TabsContent value="kanban" className="min-h-0 flex-1 overflow-hidden px-4 pb-4 pt-2">
+              <TabsContent value="kanban" className="min-h-0 flex-1 overflow-hidden px-0 pb-4 pt-2 md:px-4">
                 <DndContext
                   sensors={sensors}
                   collisionDetection={closestCorners}
                   onDragStart={handleDragStart}
                   onDragEnd={handleDragEnd}
                 >
+                  <div className="-mx-1 overflow-x-auto px-3 pb-1 md:mx-0 md:overflow-visible md:px-0">
                   <div className="flex h-full min-h-[400px] gap-3">
                     {(KANBAN_COLUMNS as readonly KanbanColumnId[]).map((col) => (
                       <DroppableCol key={col} id={col} title={COL_LABELS[col]} color={selected.color}>
@@ -642,6 +672,7 @@ export function ProjetsWorkspace({
                       </DroppableCol>
                     ))}
                   </div>
+                  </div>
                   <DragOverlay>
                     {activeDrag ? (
                       <div className="rounded-md border bg-background p-2 text-xs shadow-lg">{activeDrag.titre}</div>
@@ -653,7 +684,7 @@ export function ProjetsWorkspace({
                 <div className="mb-4 flex justify-end">
                   <ProjetFileButton onUpload={(f, d) => void uploadProjetFile(f, d)} />
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {allFiles.length === 0 ? (
                     <p className="text-xs text-muted-foreground">Aucun fichier</p>
                   ) : (
