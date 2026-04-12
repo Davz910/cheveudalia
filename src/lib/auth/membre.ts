@@ -10,6 +10,7 @@ export type MembreRow = {
   role: Role;
   statut: string | null;
   permissions: Record<string, unknown> | null;
+  avatar_url?: string | null;
 };
 
 export async function getSessionMembre(): Promise<MembreRow | null> {
@@ -21,10 +22,11 @@ export async function getSessionMembre(): Promise<MembreRow | null> {
 
   const { data, error } = await supabase
     .from("membres")
-    .select("id,auth_user_id,prenom,nom,email,role,statut,permissions")
+    .select("id,auth_user_id,prenom,nom,email,role,statut,permissions,avatar_url")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
   if (error || !data) return null;
-  return data as MembreRow;
+  const row = data as MembreRow & { avatar_url?: string | null };
+  return { ...row, avatar_url: row.avatar_url ?? null };
 }

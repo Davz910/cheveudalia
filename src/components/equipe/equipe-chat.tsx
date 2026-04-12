@@ -8,9 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { useEquipeOpenConv } from "@/components/equipe/equipe-open-conv-context";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { Paperclip } from "lucide-react";
 
@@ -19,6 +20,7 @@ type MembreRow = {
   prenom: string;
   nom: string;
   email: string;
+  avatar_url?: string | null;
 };
 
 type ProjetRow = {
@@ -127,13 +129,6 @@ function formatShortTime(iso: string) {
   return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 }
 
-function isConvUnread(convId: string, last: MessageRow | undefined, currentUserId: string): boolean {
-  if (!last || last.from_id === currentUserId) return false;
-  const readId = readMsgMap()[convId];
-  if (!readId) return true;
-  return last.id !== readId;
-}
-
 function typingSentence(peers: { prenom: string }[]): string {
   if (peers.length === 0) return "";
   const n = peers.map((p) => p.prenom);
@@ -144,6 +139,7 @@ function typingSentence(peers: { prenom: string }[]): string {
 
 export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
   const { toast } = useToast();
+  const { setOpenConvId } = useEquipeOpenConv();
   const supabase = useMemo(() => createClient(), []);
 
   const [membres, setMembres] = useState<MembreRow[]>([]);
@@ -166,6 +162,7 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
   } | null>(null);
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
   const isMd = useMediaQuery("(min-width: 768px)");
+  const [unreadByConv, setUnreadByConv] = useState<Record<string, number>>({});
 
   const fileRef = useRef<HTMLInputElement>(null);
   const msgChannelRef = useRef<RealtimeChannel | null>(null);
@@ -192,10 +189,15 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
     membresRef.current = membres;
   }, [membres]);
 
+  useEffect(() => {
+    setOpenConvId(conv?.convId ?? null);
+    return () => setOpenConvId(null);
+  }, [conv?.convId, setOpenConvId]);
+
   const loadLists = useCallback(async () => {
     setLoadingList(true);
     const [mRes, pRes] = await Promise.all([
-      supabase.from("membres").select("id,prenom,nom,email").order("prenom"),
+      supabase.from("membres").select("id,prenom,nom,email,avatar_url").order("prenom"),
       supabase.from("projets").select("id,nom,icon,membres").order("nom"),
     ]);
     if (mRes.error) toast({ title: "Membres", description: mRes.error.message, variant: "destructive" });
@@ -255,9 +257,53 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
     setPreviewByConv(map);
   }, [convIds, supabase, toast]);
 
+  const loadUnreadCounts = useCallback(async () => {
+    if (convIds.length === 0) {
+      setUnreadByConv({});
+      return;
+    }
+    const readMap = readMsgMap();
+    const next: Record<string, number> = {};
+
+    for (const cid of convIds) {
+      const lastReadId = readMap[cid];
+      if (!lastReadId) {
+        const { count } = await supabase
+          .from("messages")
+          .select("*", { count: "exact", head: true })
+          .eq("conv_id", cid)
+          .neq("from_id", currentMembre.id);
+        next[cid] = count ?? 0;
+      } else {
+        const { data: readMsg } = await supabase.from("messages").select("created_at").eq("id", lastReadId).maybeSingle();
+        if (!readMsg?.created_at) {
+          const { count } = await supabase
+            .from("messages")
+            .select("*", { count: "exact", head: true })
+            .eq("conv_id", cid)
+            .neq("from_id", currentMembre.id);
+          next[cid] = count ?? 0;
+        } else {
+          const { count } = await supabase
+            .from("messages")
+            .select("*", { count: "exact", head: true })
+            .eq("conv_id", cid)
+            .neq("from_id", currentMembre.id)
+            .gt("created_at", readMsg.created_at);
+          next[cid] = count ?? 0;
+        }
+      }
+    }
+    setUnreadByConv(next);
+  }, [convIds, currentMembre.id, supabase]);
+
   useEffect(() => {
     void loadPreviews();
   }, [loadPreviews]);
+
+  useEffect(() => {
+    void loadUnreadCounts();
+  }, [loadUnreadCounts]);
 
   /* Présence globale en ligne */
   useEffect(() => {
@@ -290,7 +336,7 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
     };
   }, [supabase, currentMembre.id]);
 
-  /* Realtime : nouveaux messages sur toutes les convs → toast + refresh aperçus */
+  /* Realtime : aperçus + compteurs non lus (toasts gérés par EquipeGlobalMessageToasts dans le shell) */
   useEffect(() => {
     if (convIds.length === 0) return;
 
@@ -299,52 +345,10 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
       globalMsgChannelRef.current = null;
     }
 
-    const ch = supabase.channel(`equipe-msgs-global:${currentMembre.id}`);
-    const onInsert = (payload: { new: Record<string, unknown> }) => {
-      const row = payload.new as MessageRow;
+    const ch = supabase.channel(`equipe-previews:${currentMembre.id}`);
+    const onInsert = () => {
       void loadPreviews();
-      if (row.from_id === currentMembre.id) return;
-      const open = convRef.current;
-      if (open && open.convId === row.conv_id) return;
-
-      const from = membresRef.current.find((x) => x.id === row.from_id);
-      const prenom = from?.prenom ?? "Quelqu'un";
-      const invite = parseCallInviteText(row.texte);
-      if (invite) {
-        toast({
-          duration: 4000,
-          title: (
-            <div className="flex items-center gap-2">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-medium text-primary">
-                {from ? initials(from.prenom, from.nom) : "?"}
-              </span>
-              <span className="text-sm font-medium">
-                {prenom} vous invite à un appel {invite.kind === "audio" ? "audio" : "vidéo"}
-              </span>
-            </div>
-          ),
-          description: "Ouvrez la conversation pour rejoindre.",
-        });
-        return;
-      }
-
-      const raw = row.fichier_url ? "Fichier joint" : (row.texte ?? "").replace(/\s+/g, " ").trim();
-      const preview = raw.slice(0, 30);
-
-      toast({
-        duration: 4000,
-        title: (
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-medium text-primary">
-              {from ? initials(from.prenom, from.nom) : "?"}
-            </span>
-            <span className="text-sm font-medium">
-              {prenom} a envoyé un message
-            </span>
-          </div>
-        ),
-        description: preview || "…",
-      });
+      void loadUnreadCounts();
     };
 
     for (const cid of convIds) {
@@ -356,7 +360,7 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
           table: "messages",
           filter: `conv_id=eq.${cid}`,
         },
-        (payload) => onInsert(payload as { new: Record<string, unknown> })
+        onInsert
       );
     }
 
@@ -366,7 +370,7 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
       void supabase.removeChannel(ch);
       globalMsgChannelRef.current = null;
     };
-  }, [convIds, supabase, currentMembre.id, loadPreviews, toast]);
+  }, [convIds, supabase, currentMembre.id, loadPreviews, loadUnreadCounts]);
 
   /* Présence « en train d'écrire » sur la conv ouverte */
   useEffect(() => {
@@ -375,7 +379,6 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
       typingIdleTimerRef.current = null;
     }
     setTypingPeers([]);
-    setText((t) => t);
 
     if (!conv) {
       if (typingChannelRef.current) {
@@ -569,7 +572,10 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
   useEffect(() => {
     if (!conv || loadingMsg) return;
     const last = messages[messages.length - 1];
-    if (last) setReadMsgId(conv.convId, last.id);
+    if (last) {
+      setReadMsgId(conv.convId, last.id);
+      setUnreadByConv((prev) => ({ ...prev, [conv.convId]: 0 }));
+    }
   }, [conv, messages, loadingMsg]);
 
   useEffect(() => {
@@ -717,6 +723,7 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
                       active={conv?.kind === "dm" && conv.peer.id === m.id}
                       online={onlineIds.has(m.id)}
                       previewByConv={previewByConv}
+                      unreadCount={unreadByConv}
                       onSelect={() => void selectDm(m)}
                     />
                   ))}
@@ -736,6 +743,7 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
                         currentUserId={currentMembre.id}
                         active={conv?.kind === "project" && conv.convId === p.id}
                         previewByConv={previewByConv}
+                        unreadCount={unreadByConv}
                         onSelect={() => selectProject(p)}
                       />
                     ))
@@ -847,8 +855,22 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
                 const mine = msg.from_id === currentMembre.id;
                 const from = membres.find((x) => x.id === msg.from_id);
                 const label = from ? `${from.prenom} ${from.nom}` : "…";
+                const senderAvatar = mine ? currentMembre.avatar_url : from?.avatar_url;
+                const senderFb = mine
+                  ? initials(currentMembre.prenom, currentMembre.nom)
+                  : from
+                    ? initials(from.prenom, from.nom)
+                    : "?";
                 return (
-                  <div key={msg.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
+                  <div key={msg.id} className={cn("flex gap-2", mine ? "flex-row-reverse" : "flex-row")}>
+                    <Avatar className="mt-0.5 h-7 w-7 shrink-0">
+                      {senderAvatar ? (
+                        <AvatarImage src={senderAvatar} alt="" className="object-cover" />
+                      ) : null}
+                      <AvatarFallback className="bg-muted text-[10px] font-medium text-foreground">
+                        {senderFb}
+                      </AvatarFallback>
+                    </Avatar>
                     <div
                       className={cn(
                         "max-w-[85%] rounded-lg px-3 py-2 text-xs",
@@ -973,6 +995,9 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
                     )}
                   />
                   <Avatar className="h-7 w-7">
+                    {m.avatar_url ? (
+                      <AvatarImage src={m.avatar_url} alt="" className="object-cover" />
+                    ) : null}
                     <AvatarFallback className="text-[10px]">{initials(m.prenom, m.nom)}</AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">
@@ -1026,6 +1051,7 @@ function DmRow({
   active,
   online,
   previewByConv,
+  unreadCount,
   onSelect,
 }: {
   peer: MembreRow;
@@ -1033,6 +1059,7 @@ function DmRow({
   active: boolean;
   online: boolean;
   previewByConv: Record<string, MessageRow>;
+  unreadCount: Record<string, number>;
   onSelect: () => void;
 }) {
   const [cid, setCid] = useState<string | null>(null);
@@ -1049,7 +1076,8 @@ function DmRow({
   const last = cid ? previewByConv[cid] : undefined;
   const fromMe = last?.from_id === currentUserId;
   const line = formatPreviewLine(last, fromMe);
-  const unread = cid ? isConvUnread(cid, last, currentUserId) : false;
+  const nUnread = cid ? (unreadCount[cid] ?? 0) : 0;
+  const hasUnread = nUnread > 0;
   const time = last ? formatShortTime(last.created_at) : "";
 
   return (
@@ -1068,16 +1096,26 @@ function DmRow({
             online ? "bg-[#639922]" : "bg-muted-foreground/40"
           )}
         />
+        <Avatar className="mt-0.5 h-8 w-8 shrink-0">
+          {peer.avatar_url ? (
+            <AvatarImage src={peer.avatar_url} alt="" className="object-cover" />
+          ) : null}
+          <AvatarFallback className="bg-primary/10 text-[10px] font-medium text-primary">
+            {initials(peer.prenom, peer.nom)}
+          </AvatarFallback>
+        </Avatar>
         <div className="min-w-0 flex-1">
-          <div className={cn("truncate", unread ? "font-semibold text-foreground" : "font-medium")}>
-            {peer.prenom} {peer.nom}
+          <div className="flex items-center gap-1.5">
+            <div className={cn("min-w-0 flex-1 truncate", hasUnread ? "font-semibold text-foreground" : "font-medium")}>
+              {peer.prenom} {peer.nom}
+            </div>
+            {nUnread > 0 ? (
+              <span className="pointer-events-none flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold leading-none text-primary-foreground">
+                {nUnread > 99 ? "99+" : nUnread}
+              </span>
+            ) : null}
           </div>
-          <div className="mt-0.5 flex items-start gap-1">
-            {unread ? (
-              <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
-            ) : (
-              <span className="mt-1 w-1.5 shrink-0" aria-hidden />
-            )}
+          <div className="mt-0.5">
             <div className="min-w-0 flex-1">
               {line ? (
                 <p className="truncate text-[10px] leading-snug text-muted-foreground">
@@ -1100,19 +1138,22 @@ function ProjectRow({
   currentUserId,
   active,
   previewByConv,
+  unreadCount,
   onSelect,
 }: {
   projet: ProjetRow;
   currentUserId: string;
   active: boolean;
   previewByConv: Record<string, MessageRow>;
+  unreadCount: Record<string, number>;
   onSelect: () => void;
 }) {
   const cid = projet.id;
   const last = previewByConv[cid];
   const fromMe = last?.from_id === currentUserId;
   const line = formatPreviewLine(last, fromMe);
-  const unread = isConvUnread(cid, last, currentUserId);
+  const nUnread = unreadCount[cid] ?? 0;
+  const hasUnread = nUnread > 0;
   const time = last ? formatShortTime(last.created_at) : "";
 
   return (
@@ -1127,13 +1168,17 @@ function ProjectRow({
       <div className="flex items-start gap-2">
         <span className="text-[14px]">{projet.icon ?? "📁"}</span>
         <div className="min-w-0 flex-1">
-          <div className={cn("truncate", unread ? "font-semibold" : "font-medium")}>{projet.nom}</div>
-          <div className="mt-0.5 flex items-start gap-1">
-            {unread ? (
-              <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
-            ) : (
-              <span className="mt-1 w-1.5 shrink-0" aria-hidden />
-            )}
+          <div className="flex items-center gap-1.5">
+            <div className={cn("min-w-0 flex-1 truncate", hasUnread ? "font-semibold" : "font-medium")}>
+              {projet.nom}
+            </div>
+            {nUnread > 0 ? (
+              <span className="pointer-events-none flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold leading-none text-primary-foreground">
+                {nUnread > 99 ? "99+" : nUnread}
+              </span>
+            ) : null}
+          </div>
+          <div className="mt-0.5">
             <div className="min-w-0 flex-1">
               {line ? (
                 <p className="truncate text-[10px] leading-snug text-muted-foreground">

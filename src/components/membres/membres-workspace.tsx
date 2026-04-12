@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addMonths,
   eachDayOfInterval,
@@ -22,6 +22,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
@@ -67,6 +68,7 @@ type MembreRh = {
   date_fin: string | null;
   permissions: Record<string, unknown> | null;
   presences: unknown;
+  avatar_url?: string | null;
 };
 
 const ROLES: Role[] = ["gerant", "sav", "logistique", "marketing", "cm"];
@@ -440,6 +442,8 @@ function MembreDetail({
   });
   const [presMonth, setPresMonth] = useState(() => startOfMonth(new Date()));
   const [presMap, setPresMap] = useState(() => parsePresences(membre.presences));
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   useEffect(() => {
     setProfil({
@@ -463,6 +467,40 @@ function MembreDetail({
   }, [membre]);
 
   const isSelf = membre.id === currentGerantId;
+
+  const uploadAvatar = async (file: File) => {
+    if (!file.size) return;
+    setAvatarUploading(true);
+    const path = `${membre.id}.jpg`;
+    const { error: upErr } = await supabase.storage.from("avatars").upload(path, file, {
+      upsert: true,
+      contentType: file.type || "image/jpeg",
+      cacheControl: "3600",
+    });
+    if (upErr) {
+      toast({ title: "Photo", description: upErr.message, variant: "destructive" });
+      setAvatarUploading(false);
+      return;
+    }
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("avatars").getPublicUrl(path);
+    const { data, error } = await supabase
+      .from("membres")
+      .update({ avatar_url: publicUrl })
+      .eq("id", membre.id)
+      .select("*")
+      .single();
+    if (error) {
+      toast({ title: "Photo", description: error.message, variant: "destructive" });
+      setAvatarUploading(false);
+      return;
+    }
+    toast({ title: "Photo de profil mise à jour" });
+    onUpdated(data as MembreRh);
+    setAvatarUploading(false);
+    if (avatarInputRef.current) avatarInputRef.current.value = "";
+  };
 
   const saveProfil = async () => {
     const { data, error } = await supabase
@@ -638,7 +676,42 @@ function MembreDetail({
               <CardTitle>Profil</CardTitle>
               <CardDescription>Identité et rôle</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap items-center gap-4">
+                <button
+                  type="button"
+                  disabled={avatarUploading}
+                  onClick={() => avatarInputRef.current?.click()}
+                  className="group relative shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                  title="Changer la photo"
+                >
+                  <Avatar className="h-20 w-20 border border-border">
+                    {membre.avatar_url ? (
+                      <AvatarImage src={membre.avatar_url} alt="" className="object-cover" />
+                    ) : null}
+                    <AvatarFallback className="text-lg font-medium">
+                      {initials(membre.prenom, membre.nom)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/45 text-[11px] font-medium text-white opacity-0 transition group-hover:opacity-100">
+                    {avatarUploading ? "…" : "Modifier"}
+                  </span>
+                </button>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void uploadAvatar(f);
+                  }}
+                />
+                <p className="max-w-xs text-[11px] text-muted-foreground">
+                  JPG recommandé. Clic sur la photo pour envoyer une nouvelle image (stockage public).
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label>Prénom</Label>
                 <Input value={profil.prenom} onChange={(e) => setProfil((p) => ({ ...p, prenom: e.target.value }))} />
@@ -698,6 +771,7 @@ function MembreDetail({
                   onChange={(e) => setProfil((p) => ({ ...p, horaires: e.target.value }))}
                   placeholder="Ex. Lun–Ven 9h–18h"
                 />
+              </div>
               </div>
             </CardContent>
           </Card>

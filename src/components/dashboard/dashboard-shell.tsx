@@ -19,7 +19,9 @@ import { ROLE_LABELS, modulesForRole } from "@/lib/roles";
 import { logoutAction } from "@/app/actions/auth";
 import { NotificationBell } from "@/components/dashboard/notification-bell";
 import { SidebarNavItems } from "@/components/dashboard/sidebar-nav-items";
+import { EquipeGlobalMessageToasts } from "@/components/equipe/equipe-global-message-toasts";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Menu } from "lucide-react";
 
 const SIDEBAR_COLLAPSED_KEY = "cheveudalia-dashboard-sidebar-collapsed";
@@ -79,7 +81,7 @@ export function DashboardShell({
   title,
   marketLabel = "🇫🇷 France",
 }: {
-  membre: { id: string; prenom: string; nom: string; role: Role };
+  membre: { id: string; prenom: string; nom: string; role: Role; avatar_url?: string | null };
   children: React.ReactNode;
   title?: string;
   marketLabel?: string;
@@ -199,6 +201,7 @@ export function DashboardShell({
 
   return (
     <div className="flex h-screen overflow-hidden">
+      <EquipeGlobalMessageToasts currentMembreId={membre.id} />
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
         <SheetContent
           side="left"
@@ -241,9 +244,14 @@ export function DashboardShell({
               type="submit"
               className="flex w-full cursor-pointer items-center gap-2 rounded-md p-1.5 text-left hover:bg-muted"
             >
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-medium text-primary-foreground">
-                {initials(membre.prenom, membre.nom)}
-              </div>
+              <Avatar className="h-7 w-7 shrink-0">
+                {membre.avatar_url ? (
+                  <AvatarImage src={membre.avatar_url} alt="" className="object-cover" />
+                ) : null}
+                <AvatarFallback className="bg-primary text-[11px] font-medium text-primary-foreground">
+                  {initials(membre.prenom, membre.nom)}
+                </AvatarFallback>
+              </Avatar>
               <div className="min-w-0">
                 <div className="truncate text-xs font-medium">
                   {membre.prenom} {membre.nom.charAt(0)}.
@@ -333,9 +341,14 @@ export function DashboardShell({
                   type="submit"
                   className="flex cursor-pointer items-center justify-center rounded-md p-1.5 hover:bg-muted"
                 >
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-medium text-primary-foreground">
-                    {initials(membre.prenom, membre.nom)}
-                  </div>
+                  <Avatar className="h-7 w-7 shrink-0">
+                    {membre.avatar_url ? (
+                      <AvatarImage src={membre.avatar_url} alt="" className="object-cover" />
+                    ) : null}
+                    <AvatarFallback className="bg-primary text-[11px] font-medium text-primary-foreground">
+                      {initials(membre.prenom, membre.nom)}
+                    </AvatarFallback>
+                  </Avatar>
                 </button>
               </TooltipTrigger>
               <TooltipContent side="right" sideOffset={8}>
@@ -347,9 +360,14 @@ export function DashboardShell({
               type="submit"
               className="flex w-full cursor-pointer items-center gap-2 rounded-md p-1.5 text-left hover:bg-muted"
             >
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-medium text-primary-foreground">
-                {initials(membre.prenom, membre.nom)}
-              </div>
+              <Avatar className="h-7 w-7 shrink-0">
+                {membre.avatar_url ? (
+                  <AvatarImage src={membre.avatar_url} alt="" className="object-cover" />
+                ) : null}
+                <AvatarFallback className="bg-primary text-[11px] font-medium text-primary-foreground">
+                  {initials(membre.prenom, membre.nom)}
+                </AvatarFallback>
+              </Avatar>
               <div className="min-w-0">
                 <div className="truncate text-xs font-medium">
                   {membre.prenom} {membre.nom.charAt(0)}.

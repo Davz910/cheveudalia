@@ -16,6 +16,7 @@ export default async function EquipePage() {
           prenom: membre.prenom,
           nom: membre.nom,
           email: membre.email,
+          avatar_url: membre.avatar_url,
         }}
       />
     </div>
