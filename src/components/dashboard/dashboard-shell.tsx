@@ -194,7 +194,7 @@ export function DashboardShell({
                   !active && "font-normal"
                 );
                 const iconClass = cn(
-                  "material-icons shrink-0 select-none text-[18px] leading-none",
+                  "material-icons shrink-0 select-none text-[14px] leading-none",
                   active ? "text-[#D4537E]" : "text-muted-foreground group-hover:text-foreground"
                 );
                 const linkInner = (
@@ -251,7 +251,7 @@ export function DashboardShell({
             onClick={toggleSidebar}
             aria-label={sidebarCollapsed ? "Développer la navigation" : "Réduire la navigation"}
           >
-            <span className="material-icons text-[18px] leading-none">
+            <span className="material-icons text-[14px] leading-none">
               {sidebarCollapsed ? "chevron_right" : "chevron_left"}
             </span>
           </Button>
