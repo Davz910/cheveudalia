@@ -106,6 +106,22 @@ function jitsiMeetUrl(convId: string, kind: CallInviteKind): string {
   return `${room}#config.startWithVideoMuted=false&config.startWithAudioMuted=false`;
 }
 
+/** Safari iOS bloque parfois window.open ; fallback navigation plein écran. */
+function openJitsiMeetUrl(url: string) {
+  const w = window.open(url, "_blank", "noopener,noreferrer");
+  if (w == null) {
+    window.location.href = url;
+  }
+}
+
+function supabaseErrorText(err: { message: string; code?: string; details?: string | null; hint?: string | null }) {
+  const bits = [err.message];
+  if (err.code) bits.push(`code: ${err.code}`);
+  if (err.details) bits.push(err.details);
+  if (err.hint) bits.push(`hint: ${err.hint}`);
+  return bits.join(" — ");
+}
+
 function previewSnippet(msg: MessageRow): string {
   const invite = parseCallInviteText(msg.texte);
   if (invite) {
@@ -655,20 +671,68 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
   }
 
   async function initiateCall(kind: CallInviteKind) {
-    if (!conv) return;
-    const texte =
-      kind === "audio" ? `📞 APPEL_AUDIO:${conv.convId}` : `📹 APPEL_VIDEO:${conv.convId}`;
-    const { error } = await supabase.from("messages").insert({
-      conv_id: conv.convId,
-      from_id: currentMembre.id,
-      texte,
-      fichier_url: null,
-    });
-    if (error) {
-      toast({ title: "Appel", description: error.message, variant: "destructive" });
+    const currentUserId = currentMembre.id;
+
+    if (!conv) {
+      console.warn("[Jitsi] initiateCall — pas de conversation", { conv_id: undefined, currentUserId });
+      toast({
+        title: "Appel impossible",
+        description: "Aucune conversation sélectionnée.",
+        variant: "destructive",
+      });
       return;
     }
-    window.open(jitsiMeetUrl(conv.convId, kind), "_blank", "noopener,noreferrer");
+
+    let convId: string;
+    try {
+      if (conv.kind === "dm") {
+        convId = await ensureDmThread(conv.peer.id);
+      } else {
+        convId = conv.convId;
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[Jitsi] résolution conv_id", { err: e, currentUserId });
+      toast({
+        title: "Appel — conversation",
+        description: msg,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    console.log("[Jitsi] initiateCall", { conv_id: convId, currentUserId });
+
+    const url = jitsiMeetUrl(convId, kind);
+    const texte =
+      kind === "audio" ? `📞 APPEL_AUDIO:${convId}` : `📹 APPEL_VIDEO:${convId}`;
+
+    try {
+      const { error } = await supabase.from("messages").insert({
+        conv_id: convId,
+        from_id: currentUserId,
+        texte,
+        fichier_url: null,
+      });
+      if (error) {
+        console.error("[Jitsi] INSERT messages échoué", error);
+        toast({
+          title: "Message d'appel non enregistré",
+          description: supabaseErrorText(error),
+          variant: "destructive",
+        });
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[Jitsi] INSERT messages exception", e);
+      toast({
+        title: "Message d'appel non enregistré",
+        description: msg,
+        variant: "destructive",
+      });
+    }
+
+    openJitsiMeetUrl(url);
   }
 
   const sidebarMembers = useMemo(() => {
@@ -778,7 +842,13 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
             variant="outline"
             className="h-7 text-[11px]"
             disabled={!conv}
-            onClick={() => void initiateCall("audio")}
+            onClick={() => {
+              console.log("[Jitsi] clic 📞", {
+                conv_id: conv?.convId,
+                currentUserId: currentMembre.id,
+              });
+              void initiateCall("audio");
+            }}
           >
             📞 Appel audio
           </Button>
@@ -788,7 +858,13 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
             variant="outline"
             className="h-7 text-[11px]"
             disabled={!conv}
-            onClick={() => void initiateCall("video")}
+            onClick={() => {
+              console.log("[Jitsi] clic 📹", {
+                conv_id: conv?.convId,
+                currentUserId: currentMembre.id,
+              });
+              void initiateCall("video");
+            }}
           >
             📹 Vidéo
           </Button>
@@ -809,10 +885,8 @@ export function EquipeChat({ currentMembre }: { currentMembre: MembreRow }) {
                   size="sm"
                   className="h-8 bg-primary text-[11px] text-primary-foreground"
                   onClick={() => {
-                    window.open(
-                      jitsiMeetUrl(incomingCallBanner.convId, incomingCallBanner.kind),
-                      "_blank",
-                      "noopener,noreferrer"
+                    openJitsiMeetUrl(
+                      jitsiMeetUrl(incomingCallBanner.convId, incomingCallBanner.kind)
                     );
                     setIncomingCallBanner(null);
                   }}
