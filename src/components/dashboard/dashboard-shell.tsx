@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import {
   Select,
   SelectContent,
@@ -76,13 +77,16 @@ export function DashboardShell({
   title,
   marketLabel = "🇫🇷 France",
 }: {
-  membre: { prenom: string; nom: string; role: Role };
+  membre: { id: string; prenom: string; nom: string; role: Role };
   children: React.ReactNode;
   title?: string;
   marketLabel?: string;
 }) {
   const pathname = usePathname();
+  const supabase = useMemo(() => createClient(), []);
   const allowed = modulesForRole(membre.role);
+  const canSeeEquipe = allowed.includes("equipe");
+  const [equipeUnreadCount, setEquipeUnreadCount] = useState(0);
 
   const visibleNav = NAV.map((g) => ({
     ...g,
@@ -137,6 +141,55 @@ export function DashboardShell({
     });
   }, []);
 
+  const refreshEquipeUnread = useCallback(async () => {
+    if (!membre.id || !canSeeEquipe) return;
+    const { count, error } = await supabase
+      .from("notifications")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", membre.id)
+      .eq("canal", "equipe")
+      .eq("read", false);
+    if (!error && typeof count === "number") {
+      setEquipeUnreadCount(count);
+    }
+  }, [membre.id, canSeeEquipe, supabase]);
+
+  const markEquipeNotificationsRead = useCallback(async () => {
+    if (!membre.id) return;
+    const { error } = await supabase
+      .from("notifications")
+      .update({ read: true })
+      .eq("user_id", membre.id)
+      .eq("canal", "equipe")
+      .eq("read", false);
+    if (!error) {
+      setEquipeUnreadCount(0);
+    }
+  }, [membre.id, supabase]);
+
+  useEffect(() => {
+    if (!membre.id || !canSeeEquipe) return;
+    void refreshEquipeUnread();
+    const channel = supabase
+      .channel(`notifications-equipe-${membre.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${membre.id}`,
+        },
+        () => {
+          void refreshEquipeUnread();
+        }
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [membre.id, canSeeEquipe, supabase, refreshEquipeUnread]);
+
   return (
     <div className="flex h-screen overflow-hidden">
       <aside
@@ -187,6 +240,9 @@ export function DashboardShell({
               {group.items.map((item) => {
                 const active =
                   item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
+                const isEquipe = item.key === "equipe";
+                const equipeHasUnread = isEquipe && equipeUnreadCount > 0;
+                const equipeIcon = equipeHasUnread ? "mark_chat_unread" : "chat_bubble";
                 const linkClass = cn(
                   "group mb-px flex cursor-pointer items-center gap-2 rounded-md py-1 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
                   sidebarCollapsed ? "justify-center px-1.5" : "px-3",
@@ -195,13 +251,31 @@ export function DashboardShell({
                 );
                 const iconClass = cn(
                   "material-icons shrink-0 select-none text-[14px] leading-none",
-                  active ? "text-[#D4537E]" : "text-muted-foreground group-hover:text-foreground"
+                  isEquipe && equipeHasUnread
+                    ? "text-[#D4537E]"
+                    : active
+                      ? "text-[#D4537E]"
+                      : "text-muted-foreground group-hover:text-foreground"
                 );
+                const onNavClick = isEquipe ? () => void markEquipeNotificationsRead() : undefined;
                 const linkInner = (
                   <>
-                    <span className={iconClass} aria-hidden>
-                      {item.icon}
-                    </span>
+                    {isEquipe ? (
+                      <span className="relative inline-flex shrink-0">
+                        <span className={iconClass} aria-hidden>
+                          {equipeIcon}
+                        </span>
+                        {equipeHasUnread ? (
+                          <span className="pointer-events-none absolute -right-1.5 -top-1 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-red-600 px-0.5 text-[8px] font-bold leading-none text-white">
+                            {equipeUnreadCount > 99 ? "99+" : equipeUnreadCount}
+                          </span>
+                        ) : null}
+                      </span>
+                    ) : (
+                      <span className={iconClass} aria-hidden>
+                        {item.icon}
+                      </span>
+                    )}
                     {!sidebarCollapsed ? (
                       <>
                         <span className="min-w-0 flex-1 truncate">{item.label}</span>
@@ -214,22 +288,38 @@ export function DashboardShell({
                     ) : null}
                   </>
                 );
+                const linkLabel =
+                  isEquipe && equipeHasUnread
+                    ? `${item.label} (${equipeUnreadCount} non ${equipeUnreadCount > 1 ? "lus" : "lu"})`
+                    : item.label;
+                const a11yLabel = sidebarCollapsed || (isEquipe && equipeHasUnread) ? linkLabel : undefined;
                 if (sidebarCollapsed) {
                   return (
                     <Tooltip key={item.href}>
                       <TooltipTrigger asChild>
-                        <Link href={item.href} className={linkClass}>
+                        <Link
+                          href={item.href}
+                          className={linkClass}
+                          onClick={onNavClick}
+                          aria-label={a11yLabel}
+                        >
                           {linkInner}
                         </Link>
                       </TooltipTrigger>
                       <TooltipContent side="right" sideOffset={8}>
-                        {item.label}
+                        {linkLabel}
                       </TooltipContent>
                     </Tooltip>
                   );
                 }
                 return (
-                  <Link key={item.href} href={item.href} className={linkClass}>
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={linkClass}
+                    onClick={onNavClick}
+                    aria-label={a11yLabel}
+                  >
                     {linkInner}
                   </Link>
                 );

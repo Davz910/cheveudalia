@@ -11,7 +11,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <ModuleAccessGuard role={membre.role}>
-      <DashboardShell membre={{ prenom: membre.prenom, nom: membre.nom, role: membre.role }}>
+      <DashboardShell
+        membre={{
+          id: membre.id,
+          prenom: membre.prenom,
+          nom: membre.nom,
+          role: membre.role,
+        }}
+      >
         {children}
       </DashboardShell>
     </ModuleAccessGuard>
