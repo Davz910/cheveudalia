@@ -157,7 +157,7 @@ export function moduleAllowed(
 export function defaultDashboardPath(role: Role): string {
   switch (role) {
     case "sav":
-      return "/dashboard/sav/email";
+      return "/dashboard/sav";
     case "logistique":
       return "/dashboard/logistique";
     case "marketing":

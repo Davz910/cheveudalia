@@ -1,19 +1,6 @@
-import { SavWorkspace } from "@/components/sav/sav-workspace";
-import { getSessionMembre } from "@/lib/auth/membre";
 import { redirect } from "next/navigation";
 
-export default async function SavEmailPage() {
-  const membre = await getSessionMembre();
-  if (!membre) {
-    redirect("/login");
-  }
-
-  const name = `${membre.prenom} ${membre.nom}`.trim();
-  const canMutate = membre.role === "sav" || membre.role === "gerant";
-
-  return (
-    <div className="h-full min-h-0">
-      <SavWorkspace canal="email" currentMembreName={name || "Agent"} canMutate={canMutate} />
-    </div>
-  );
+/** Ancienne URL : même écran que /dashboard/sav */
+export default function SavEmailLegacyPage() {
+  redirect("/dashboard/sav");
 }

@@ -52,11 +52,9 @@ type ClientRow = {
 };
 
 export function SavWorkspace({
-  canal,
   currentMembreName,
   canMutate,
 }: {
-  canal: "email" | "whatsapp";
   currentMembreName: string;
   canMutate: boolean;
 }) {
@@ -94,7 +92,7 @@ export function SavWorkspace({
       const { data, error } = await supabase
         .from("tickets_sav")
         .select("*")
-        .eq("canal", canal)
+        .eq("canal", "email")
         .order("updated_at", { ascending: false });
 
       if (error) {
@@ -111,7 +109,7 @@ export function SavWorkspace({
         return rows[0]?.id ?? null;
       });
     },
-    [supabase, toast, canal]
+    [supabase, toast]
   );
 
   useEffect(() => {
@@ -129,7 +127,7 @@ export function SavWorkspace({
 
   useEffect(() => {
     const channel = supabase
-      .channel(`tickets_sav_realtime:${canal}`)
+      .channel("tickets_sav_realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "tickets_sav" },
@@ -142,7 +140,7 @@ export function SavWorkspace({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [supabase, loadTickets, canal]);
+  }, [supabase, loadTickets]);
 
   useEffect(() => {
     void (async () => {
@@ -220,7 +218,7 @@ export function SavWorkspace({
   }) {
     if (!canMutate) return { error: "Permission refusée." };
     const { error } = await supabase.from("tickets_sav").insert({
-      canal,
+      canal: "email",
       statut: "ouvert",
       etat: "actif",
       client_nom: payload.client_nom || null,
@@ -339,15 +337,10 @@ export function SavWorkspace({
       </div>
     );
 
-  const canalLabel = canal === "email" ? "email" : "WhatsApp";
-  const viaLabel = canal === "email" ? "Email" : "WhatsApp";
-
   return (
     <div className="flex h-full min-h-0 flex-col bg-card">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {canal === "email" ? "SAV Email" : "SAV WhatsApp"}
-        </h1>
+        <h1 className="text-sm font-semibold tracking-tight text-foreground">SAV</h1>
         <Button
           type="button"
           size="sm"
@@ -459,7 +452,7 @@ export function SavWorkspace({
                           <div className="truncate text-[11px] text-muted-foreground">{t.sujet ?? "Sans objet"}</div>
                           <div className="mt-1 flex items-center gap-1">
                             <Badge variant="blue" className="text-[9px]">
-                              {canalLabel}
+                              email
                             </Badge>
                             {t.etat ? (
                               <span className="text-[10px] text-muted-foreground">{t.etat}</span>
@@ -552,7 +545,7 @@ export function SavWorkspace({
             </div>
           </div>
           <div className="border-b border-border px-3.5 py-1.5 text-[11px] text-muted-foreground">
-            Canal {canalLabel} — assignation Sarah / Leo. Temps réel activé sur{" "}
+            Canal email — assignation Sarah / Leo. Temps réel activé sur{" "}
             <code className="text-foreground">tickets_sav</code>.
           </div>
           <ScrollArea className="min-h-0 flex-1 p-3">
@@ -659,7 +652,7 @@ export function SavWorkspace({
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <span className="ml-auto text-[10px] text-muted-foreground">via {viaLabel}</span>
+              <span className="ml-auto text-[10px] text-muted-foreground">via Email</span>
             </div>
           </div>
         </div>
@@ -688,7 +681,6 @@ export function SavWorkspace({
       </div>
 
       <SavNewTicketDialog
-        title={canal === "email" ? "Nouveau ticket email" : "Nouveau ticket WhatsApp"}
         open={newOpen}
         onOpenChange={setNewOpen}
         onCreated={() => void loadTickets()}

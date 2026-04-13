@@ -48,8 +48,7 @@ const NAV: {
   {
     section: "Opérations",
     items: [
-      { href: "/dashboard/sav/email", label: "SAV Email", key: "sav", icon: "mail" },
-      { href: "/dashboard/sav/whatsapp", label: "SAV WhatsApp", key: "sav", icon: "call" },
+      { href: "/dashboard/sav", label: "SAV", key: "sav", icon: "support_agent" },
       { href: "/dashboard/logistique", label: "Logistique", key: "logistique", icon: "local_shipping" },
       { href: "/dashboard/marketing", label: "Marketing", key: "marketing", icon: "campaign" },
       { href: "/dashboard/contenus", label: "Contenus & CM", key: "contenus", icon: "photo_camera_back" },
@@ -97,8 +96,7 @@ export function DashboardShell({
   const canSeeEquipe = allowed.includes("equipe");
   const canSeeSav = allowed.includes("sav");
   const [equipeUnreadCount, setEquipeUnreadCount] = useState(0);
-  const [savEmailBadge, setSavEmailBadge] = useState(0);
-  const [savWhatsappBadge, setSavWhatsappBadge] = useState(0);
+  const [savBadge, setSavBadge] = useState(0);
 
   const visibleNav = useMemo(() => {
     const mod = modulesForRole(membre.role);
@@ -107,24 +105,20 @@ export function DashboardShell({
       items: g.items
         .filter((i) => mod.includes(i.key))
         .map((i) => {
-          if (i.href === "/dashboard/sav/email") {
-            return { ...i, badge: savEmailBadge > 0 ? savEmailBadge : undefined };
-          }
-          if (i.href === "/dashboard/sav/whatsapp") {
-            return { ...i, badge: savWhatsappBadge > 0 ? savWhatsappBadge : undefined };
+          if (i.href === "/dashboard/sav") {
+            return { ...i, badge: savBadge > 0 ? savBadge : undefined };
           }
           return i;
         }),
     })).filter((g) => g.items.length > 0);
-  }, [membre.role, savEmailBadge, savWhatsappBadge]);
+  }, [membre.role, savBadge]);
 
   const PAGE_TITLES: Record<string, string> = {
     "/dashboard": "Vue générale",
     "/dashboard/commandes": "Commandes",
     "/dashboard/produits": "Produits & stocks",
     "/dashboard/clients": "Clients CRM",
-    "/dashboard/sav/email": "SAV Email",
-    "/dashboard/sav/whatsapp": "SAV WhatsApp",
+    "/dashboard/sav": "SAV",
     "/dashboard/logistique": "Logistique & Suivi colis",
     "/dashboard/marketing": "Marketing",
     "/dashboard/contenus": "Contenus & CM",
@@ -200,23 +194,13 @@ export function DashboardShell({
 
   const refreshSavBadges = useCallback(async () => {
     if (!canSeeSav) return;
-    const [emailRes, waRes] = await Promise.all([
-      supabase
-        .from("tickets_sav")
-        .select("*", { count: "exact", head: true })
-        .eq("canal", "email")
-        .neq("etat", "archive"),
-      supabase
-        .from("tickets_sav")
-        .select("*", { count: "exact", head: true })
-        .eq("canal", "whatsapp")
-        .neq("etat", "archive"),
-    ]);
-    if (!emailRes.error && typeof emailRes.count === "number") {
-      setSavEmailBadge(emailRes.count);
-    }
-    if (!waRes.error && typeof waRes.count === "number") {
-      setSavWhatsappBadge(waRes.count);
+    const { count, error } = await supabase
+      .from("tickets_sav")
+      .select("*", { count: "exact", head: true })
+      .eq("canal", "email")
+      .neq("etat", "archive");
+    if (!error && typeof count === "number") {
+      setSavBadge(count);
     }
   }, [canSeeSav, supabase]);
 
