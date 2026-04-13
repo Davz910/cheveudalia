@@ -307,6 +307,8 @@ export function SavWorkspace({
     try {
       const res = await fetch("/api/imap/fetch", { credentials: "include" });
       const data = (await res.json().catch(() => ({}))) as {
+        connected?: boolean;
+        emailsFound?: number;
         processed?: number;
         skipped?: number;
         errors?: string[];
@@ -320,10 +322,10 @@ export function SavWorkspace({
         });
         return;
       }
-      const errs = data.errors?.length ? ` — ${data.errors.slice(0, 2).join("; ")}` : "";
+      const errs = data.errors?.length ? ` — Erreurs : ${data.errors.slice(0, 2).join("; ")}` : "";
       toast({
         title: "Boîte IMAP",
-        description: `Traités : ${data.processed ?? 0}, ignorés : ${data.skipped ?? 0}${errs}`,
+        description: `Connecté : ${String(data.connected)} · Non lus : ${data.emailsFound ?? 0} · Traités : ${data.processed ?? 0} · Ignorés : ${data.skipped ?? 0}${errs}`,
       });
       await loadTickets({ silent: true });
     } finally {

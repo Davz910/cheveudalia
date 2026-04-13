@@ -3,6 +3,9 @@ import { simpleParser } from "mailparser";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { extractContactWithClaude, type ExtractedContact } from "@/lib/sav/claude-extract-contact";
 import { findMatchingClient, ticketClientNom } from "@/lib/sav/resolve-client-nom";
+import { parseMsgs, type SavMsg } from "@/types/sav";
+
+const LOG = "[imap-fetch]";
 
 const EMPTY_EXTRACTED: ExtractedContact = {
   prenom: null,
@@ -11,7 +14,13 @@ const EMPTY_EXTRACTED: ExtractedContact = {
   telephone: null,
   numero_commande: null,
 };
-import { parseMsgs, type SavMsg } from "@/types/sav";
+
+/** Mot de passe masqué pour les logs (ne jamais logger en clair). */
+export function maskImapPassword(value: string | undefined): string {
+  if (!value) return "(non défini)";
+  if (value.length <= 4) return "****";
+  return `${value.slice(0, 2)}…${value.slice(-2)} (${value.length} car.)`;
+}
 
 function formatMsgTime() {
   return new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
@@ -26,7 +35,16 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function errFull(e: unknown): string {
+  if (e instanceof Error) {
+    return e.stack ?? e.message;
+  }
+  return String(e);
+}
+
 export type ImapFetchResult = {
+  connected: boolean;
+  emailsFound: number;
   processed: number;
   skipped: number;
   errors: string[];
@@ -39,8 +57,18 @@ export async function runImapFetch(): Promise<ImapFetchResult> {
   const pass = process.env.IMAP_PASSWORD;
   const secure = process.env.IMAP_TLS !== "false" && process.env.IMAP_TLS !== "0";
 
+  console.log(`${LOG} variables IMAP lues`, {
+    IMAP_HOST: host ?? "(non défini)",
+    IMAP_PORT: port,
+    IMAP_USER: user ?? "(non défini)",
+    IMAP_PASSWORD: maskImapPassword(pass),
+    IMAP_TLS: secure,
+  });
+
   if (!host || !user || !pass) {
-    throw new Error("IMAP_HOST, IMAP_USER ou IMAP_PASSWORD manquant");
+    const msg = "IMAP_HOST, IMAP_USER ou IMAP_PASSWORD manquant";
+    console.error(`${LOG} ${msg}`);
+    return { connected: false, emailsFound: 0, processed: 0, skipped: 0, errors: [msg] };
   }
 
   const admin = createServiceClient();
@@ -56,20 +84,41 @@ export async function runImapFetch(): Promise<ImapFetchResult> {
     logger: false,
   });
 
-  await client.connect();
+  try {
+    console.log(`${LOG} connexion IMAP vers ${host}:${port} (TLS=${secure})…`);
+    await client.connect();
+    console.log(`${LOG} connexion IMAP réussie`);
+  } catch (e) {
+    const full = errFull(e);
+    console.error(`${LOG} échec connexion IMAP`, full);
+    errors.push(`Connexion IMAP: ${full}`);
+    try {
+      await client.logout();
+    } catch {
+      /* ignore */
+    }
+    return { connected: false, emailsFound: 0, processed: 0, skipped: 0, errors };
+  }
+
   try {
     const lock = await client.getMailboxLock("INBOX");
     try {
       const searchResult = await client.search({ seen: false }, { uid: true });
       const uids = searchResult === false ? [] : searchResult;
+      const emailsFound = uids.length;
+      console.log(`${LOG} emails non lus (UIDs): ${emailsFound}`, uids);
+
       if (uids.length === 0) {
-        return { processed: 0, skipped: 0, errors: [] };
+        return { connected: true, emailsFound, processed: 0, skipped: 0, errors: [] };
       }
 
       for (const uid of uids) {
         try {
           const fetched = await client.fetchOne(String(uid), { source: true }, { uid: true });
           if (!fetched || !("source" in fetched) || !fetched.source) {
+            const msg = `UID ${uid}: pas de contenu source`;
+            console.warn(`${LOG} ${msg}`);
+            errors.push(msg);
             skipped += 1;
             continue;
           }
@@ -80,6 +129,7 @@ export async function runImapFetch(): Promise<ImapFetchResult> {
           if (mid) {
             const { data: seen } = await admin.from("sav_imap_processed").select("message_id").eq("message_id", mid).maybeSingle();
             if (seen) {
+              console.log(`${LOG} UID ${uid} déjà traité (Message-ID), ignoré`);
               await client.messageFlagsAdd(uid, ["\\Seen"], { uid: true });
               skipped += 1;
               continue;
@@ -89,14 +139,21 @@ export async function runImapFetch(): Promise<ImapFetchResult> {
           const fromAddr = parsed.from?.value?.[0];
           const fromEmail = (fromAddr?.address ?? "").trim().toLowerCase();
           const fromName = fromAddr?.name?.trim() ?? null;
+          const subjectRaw = typeof parsed.subject === "string" ? parsed.subject : "";
+          const subject = subjectRaw.trim() || "Sans objet";
+
+          console.log(`${LOG} email UID ${uid}`, {
+            sujet: subject,
+            expediteur: fromName ? `${fromName} <${fromEmail}>` : fromEmail || "(sans adresse)",
+          });
+
           if (!fromEmail) {
+            console.warn(`${LOG} UID ${uid}: pas d’adresse expéditeur, ignoré`);
             await client.messageFlagsAdd(uid, ["\\Seen"], { uid: true });
             skipped += 1;
             continue;
           }
 
-          const subjectRaw = typeof parsed.subject === "string" ? parsed.subject : "";
-          const subject = subjectRaw.trim() || "Sans objet";
           const htmlStr = typeof parsed.html === "string" ? parsed.html : null;
           const bodyHtml = htmlStr?.trim() || null;
           const textStr = typeof parsed.text === "string" ? parsed.text : "";
@@ -154,7 +211,9 @@ export async function runImapFetch(): Promise<ImapFetchResult> {
               .eq("id", openTicket.id);
 
             if (upErr) {
-              errors.push(`UID ${uid}: ${upErr.message}`);
+              const full = `UID ${uid} mise à jour ticket: ${upErr.message}${upErr.details ? ` — ${upErr.details}` : ""}${upErr.hint ? ` hint:${upErr.hint}` : ""}`;
+              console.error(`${LOG} ${full}`);
+              errors.push(full);
               continue;
             }
 
@@ -165,6 +224,7 @@ export async function runImapFetch(): Promise<ImapFetchResult> {
               );
             }
             processed += 1;
+            console.log(`${LOG} UID ${uid}: message ajouté au ticket ${openTicket.id}`);
           } else {
             const { data: inserted, error: insErr } = await admin
               .from("tickets_sav")
@@ -184,7 +244,9 @@ export async function runImapFetch(): Promise<ImapFetchResult> {
               .single();
 
             if (insErr || !inserted) {
-              errors.push(`UID ${uid}: ${insErr?.message ?? "insert"}`);
+              const full = `UID ${uid} insert ticket: ${insErr?.message ?? "insert"}${insErr?.details ? ` — ${insErr.details}` : ""}${insErr?.hint ? ` hint:${insErr.hint}` : ""}`;
+              console.error(`${LOG} ${full}`);
+              errors.push(full);
               continue;
             }
 
@@ -195,20 +257,27 @@ export async function runImapFetch(): Promise<ImapFetchResult> {
               );
             }
             processed += 1;
+            console.log(`${LOG} UID ${uid}: nouveau ticket créé ${inserted.id}`);
           }
 
           await client.messageFlagsAdd(uid, ["\\Seen"], { uid: true });
         } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          errors.push(`UID ${uid}: ${msg}`);
+          const full = errFull(e);
+          console.error(`${LOG} erreur traitement UID ${uid}`, full);
+          errors.push(`UID ${uid}: ${full}`);
         }
       }
+
+      return { connected: true, emailsFound, processed, skipped, errors };
     } finally {
       lock.release();
     }
   } finally {
-    await client.logout();
+    try {
+      await client.logout();
+      console.log(`${LOG} session IMAP fermée`);
+    } catch (e) {
+      console.warn(`${LOG} logout IMAP`, errFull(e));
+    }
   }
-
-  return { processed, skipped, errors };
 }
