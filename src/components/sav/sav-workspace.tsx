@@ -75,6 +75,7 @@ export function SavWorkspace({
   const [signatureHtml, setSignatureHtml] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
   const [sending, setSending] = useState(false);
+  const [imapLoading, setImapLoading] = useState(false);
   const [mobileConvOpen, setMobileConvOpen] = useState(false);
   const [clientSheetOpen, setClientSheetOpen] = useState(false);
   const isMd = useMediaQuery("(min-width: 768px)");
@@ -263,15 +264,71 @@ export function SavWorkspace({
       return;
     }
     setSending(true);
+
+    if (replyTab === "rep") {
+      const res = await fetch("/api/sav/send-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          ticketId: selected.id,
+          html,
+          text,
+          agentName: currentMembreName,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        toast({
+          title: "Envoi email impossible",
+          description: data.error ?? res.statusText,
+          variant: "destructive",
+        });
+        setSending(false);
+        return;
+      }
+      editorRef.current?.clear();
+      await loadTickets({ silent: true });
+      setSending(false);
+      toast({ title: "Réponse envoyée (Ionos SMTP)" });
+      return;
+    }
+
     const h = formatNowTime();
-    const msg: SavMsg =
-      replyTab === "rep"
-        ? { d: "out", t: html || text, h, agent: currentMembreName }
-        : { d: "internal", t: html || text, h, agent: currentMembreName };
+    const msg: SavMsg = { d: "internal", t: html || text, h, agent: currentMembreName };
     await appendMessage(selected.id, msg);
     editorRef.current?.clear();
     setSending(false);
-    toast({ title: replyTab === "rep" ? "Réponse enregistrée" : "Note enregistrée" });
+    toast({ title: "Note enregistrée" });
+  }
+
+  async function checkImapNow() {
+    setImapLoading(true);
+    try {
+      const res = await fetch("/api/imap/fetch", { credentials: "include" });
+      const data = (await res.json().catch(() => ({}))) as {
+        processed?: number;
+        skipped?: number;
+        errors?: string[];
+        error?: string;
+      };
+      if (!res.ok) {
+        toast({
+          title: "Boîte IMAP",
+          description: data.error ?? res.statusText,
+          variant: "destructive",
+        });
+        return;
+      }
+      const errs = data.errors?.length ? ` — ${data.errors.slice(0, 2).join("; ")}` : "";
+      toast({
+        title: "Boîte IMAP",
+        description: `Traités : ${data.processed ?? 0}, ignorés : ${data.skipped ?? 0}${errs}`,
+      });
+      await loadTickets({ silent: true });
+    } finally {
+      setImapLoading(false);
+    }
   }
 
   async function assignTo(agentId: string) {
@@ -339,17 +396,29 @@ export function SavWorkspace({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-card">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
         <h1 className="text-sm font-semibold tracking-tight text-foreground">SAV</h1>
-        <Button
-          type="button"
-          size="sm"
-          className="h-8 bg-primary text-xs text-primary-foreground"
-          disabled={!canMutate}
-          onClick={() => setNewOpen(true)}
-        >
-          + Nouveau ticket
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs"
+            disabled={imapLoading}
+            onClick={() => void checkImapNow()}
+          >
+            {imapLoading ? "Synchronisation…" : "Vérifier les emails"}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="h-8 bg-primary text-xs text-primary-foreground"
+            disabled={!canMutate}
+            onClick={() => setNewOpen(true)}
+          >
+            + Nouveau ticket
+          </Button>
+        </div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex min-h-0 flex-1">

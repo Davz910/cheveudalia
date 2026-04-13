@@ -20,6 +20,9 @@ export type TicketSavRow = {
   assigned_to: string | null;
   etat: string | null;
   msgs: SavMsg[] | null;
+  /** Message-ID du dernier message entrant (fil SMTP) */
+  imap_last_message_id?: string | null;
+  imap_references?: string | null;
   created_at: string;
   updated_at: string;
 };
