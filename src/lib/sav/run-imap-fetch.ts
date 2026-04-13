@@ -1,8 +1,16 @@
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { extractContactWithClaude } from "@/lib/sav/claude-extract-contact";
+import { extractContactWithClaude, type ExtractedContact } from "@/lib/sav/claude-extract-contact";
 import { findMatchingClient, ticketClientNom } from "@/lib/sav/resolve-client-nom";
+
+const EMPTY_EXTRACTED: ExtractedContact = {
+  prenom: null,
+  nom: null,
+  email: null,
+  telephone: null,
+  numero_commande: null,
+};
 import { parseMsgs, type SavMsg } from "@/types/sav";
 
 function formatMsgTime() {
@@ -95,11 +103,22 @@ export async function runImapFetch(): Promise<ImapFetchResult> {
           const bodyText = textStr.trim() || stripHtml(bodyHtml ?? "") || "(message vide)";
           const bodyForTicket = bodyHtml || `<pre>${bodyText.replace(/</g, "&lt;")}</pre>`;
 
-          const rawForAi = `Sujet: ${subject}\nDe: ${fromName ?? ""} <${fromEmail}>\n\n${bodyText}`.slice(0, 100_000);
-          const extracted = await extractContactWithClaude(rawForAi);
-          const matched = await findMatchingClient(admin, extracted, fromEmail);
-          const clientNom = ticketClientNom(matched, extracted, fromName);
-          const clientTel = matched?.tel?.trim() || extracted.telephone?.trim() || null;
+          const hasAnthropicKey = Boolean(process.env.ANTHROPIC_API_KEY?.trim());
+
+          let clientNom: string;
+          let clientTel: string | null;
+
+          if (hasAnthropicKey) {
+            const rawForAi = `Sujet: ${subject}\nDe: ${fromName ?? ""} <${fromEmail}>\n\n${bodyText}`.slice(0, 100_000);
+            const extracted = await extractContactWithClaude(rawForAi);
+            const matched = await findMatchingClient(admin, extracted, fromEmail);
+            clientNom = ticketClientNom(matched, extracted, fromName);
+            clientTel = matched?.tel?.trim() || extracted.telephone?.trim() || null;
+          } else {
+            const matched = await findMatchingClient(admin, EMPTY_EXTRACTED, fromEmail);
+            clientNom = ticketClientNom(matched, EMPTY_EXTRACTED, fromName);
+            clientTel = matched?.tel?.trim() || null;
+          }
 
           const h = formatMsgTime();
           const incomingMsg: SavMsg = { d: "in", t: bodyForTicket, h };
