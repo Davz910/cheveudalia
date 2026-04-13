@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 type Props = {
+  title?: string;
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onCreated: () => void;
@@ -24,7 +25,13 @@ type Props = {
   }) => Promise<{ error?: string }>;
 };
 
-export function SavNewTicketDialog({ open, onOpenChange, onCreated, createTicket }: Props) {
+export function SavNewTicketDialog({
+  title = "Nouveau ticket email",
+  open,
+  onOpenChange,
+  onCreated,
+  createTicket,
+}: Props) {
   const [clientNom, setClientNom] = useState("");
   const [clientEmail, setClientEmail] = useState("");
   const [clientTel, setClientTel] = useState("");
@@ -62,7 +69,7 @@ export function SavNewTicketDialog({ open, onOpenChange, onCreated, createTicket
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[440px]">
         <DialogHeader>
-          <DialogTitle>Nouveau ticket email</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-3 py-2">
           <div className="grid gap-1.5">

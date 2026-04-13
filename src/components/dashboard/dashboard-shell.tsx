@@ -28,7 +28,13 @@ const SIDEBAR_COLLAPSED_KEY = "cheveudalia-dashboard-sidebar-collapsed";
 
 const NAV: {
   section: string;
-  items: { href: string; label: string; key: ModuleKey; icon: string; badge?: number }[];
+  items: {
+    href: string;
+    label: string;
+    key: ModuleKey;
+    icon: string;
+    badge?: number;
+  }[];
 }[] = [
   {
     section: "Principal",
@@ -42,7 +48,8 @@ const NAV: {
   {
     section: "Opérations",
     items: [
-      { href: "/dashboard/sav", label: "SAV", key: "sav", icon: "support_agent", badge: 4 },
+      { href: "/dashboard/sav/email", label: "SAV Email", key: "sav", icon: "mail" },
+      { href: "/dashboard/sav/whatsapp", label: "SAV WhatsApp", key: "sav", icon: "call" },
       { href: "/dashboard/logistique", label: "Logistique", key: "logistique", icon: "local_shipping" },
       { href: "/dashboard/marketing", label: "Marketing", key: "marketing", icon: "campaign" },
       { href: "/dashboard/contenus", label: "Contenus & CM", key: "contenus", icon: "photo_camera_back" },
@@ -88,19 +95,36 @@ export function DashboardShell({
   const supabase = useMemo(() => createClient(), []);
   const allowed = modulesForRole(membre.role);
   const canSeeEquipe = allowed.includes("equipe");
+  const canSeeSav = allowed.includes("sav");
   const [equipeUnreadCount, setEquipeUnreadCount] = useState(0);
+  const [savEmailBadge, setSavEmailBadge] = useState(0);
+  const [savWhatsappBadge, setSavWhatsappBadge] = useState(0);
 
-  const visibleNav = NAV.map((g) => ({
-    ...g,
-    items: g.items.filter((i) => allowed.includes(i.key)),
-  })).filter((g) => g.items.length > 0);
+  const visibleNav = useMemo(() => {
+    const mod = modulesForRole(membre.role);
+    return NAV.map((g) => ({
+      ...g,
+      items: g.items
+        .filter((i) => mod.includes(i.key))
+        .map((i) => {
+          if (i.href === "/dashboard/sav/email") {
+            return { ...i, badge: savEmailBadge > 0 ? savEmailBadge : undefined };
+          }
+          if (i.href === "/dashboard/sav/whatsapp") {
+            return { ...i, badge: savWhatsappBadge > 0 ? savWhatsappBadge : undefined };
+          }
+          return i;
+        }),
+    })).filter((g) => g.items.length > 0);
+  }, [membre.role, savEmailBadge, savWhatsappBadge]);
 
   const PAGE_TITLES: Record<string, string> = {
     "/dashboard": "Vue générale",
     "/dashboard/commandes": "Commandes",
     "/dashboard/produits": "Produits & stocks",
     "/dashboard/clients": "Clients CRM",
-    "/dashboard/sav": "SAV",
+    "/dashboard/sav/email": "SAV Email",
+    "/dashboard/sav/whatsapp": "SAV WhatsApp",
     "/dashboard/logistique": "Logistique & Suivi colis",
     "/dashboard/marketing": "Marketing",
     "/dashboard/contenus": "Contenus & CM",
@@ -173,6 +197,46 @@ export function DashboardShell({
       setEquipeUnreadCount(0);
     }
   }, [membre.id, supabase]);
+
+  const refreshSavBadges = useCallback(async () => {
+    if (!canSeeSav) return;
+    const [emailRes, waRes] = await Promise.all([
+      supabase
+        .from("tickets_sav")
+        .select("*", { count: "exact", head: true })
+        .eq("canal", "email")
+        .neq("etat", "archive"),
+      supabase
+        .from("tickets_sav")
+        .select("*", { count: "exact", head: true })
+        .eq("canal", "whatsapp")
+        .neq("etat", "archive"),
+    ]);
+    if (!emailRes.error && typeof emailRes.count === "number") {
+      setSavEmailBadge(emailRes.count);
+    }
+    if (!waRes.error && typeof waRes.count === "number") {
+      setSavWhatsappBadge(waRes.count);
+    }
+  }, [canSeeSav, supabase]);
+
+  useEffect(() => {
+    if (!canSeeSav) return;
+    void refreshSavBadges();
+    const channel = supabase
+      .channel("dashboard-sav-badges")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "tickets_sav" },
+        () => {
+          void refreshSavBadges();
+        }
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [canSeeSav, supabase, refreshSavBadges]);
 
   useEffect(() => {
     if (!membre.id || !canSeeEquipe) return;

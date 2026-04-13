@@ -52,9 +52,11 @@ type ClientRow = {
 };
 
 export function SavWorkspace({
+  canal,
   currentMembreName,
   canMutate,
 }: {
+  canal: "email" | "whatsapp";
   currentMembreName: string;
   canMutate: boolean;
 }) {
@@ -62,7 +64,6 @@ export function SavWorkspace({
   const supabase = useMemo(() => createClient(), []);
   const editorRef = useRef<RichTextEditorHandle>(null);
 
-  const [canal, setCanal] = useState<"email" | "whatsapp">("email");
   const [dossier, setDossier] = useState<"recus" | "envoyes" | "brouillons" | "spam">("recus");
   const [filt, setFilt] = useState<(typeof FILTERS)[number]["id"]>("actifs");
   const [replyTab, setReplyTab] = useState<"rep" | "note">("rep");
@@ -93,7 +94,7 @@ export function SavWorkspace({
       const { data, error } = await supabase
         .from("tickets_sav")
         .select("*")
-        .eq("canal", "email")
+        .eq("canal", canal)
         .order("updated_at", { ascending: false });
 
       if (error) {
@@ -110,7 +111,7 @@ export function SavWorkspace({
         return rows[0]?.id ?? null;
       });
     },
-    [supabase, toast]
+    [supabase, toast, canal]
   );
 
   useEffect(() => {
@@ -128,7 +129,7 @@ export function SavWorkspace({
 
   useEffect(() => {
     const channel = supabase
-      .channel("tickets_sav_realtime")
+      .channel(`tickets_sav_realtime:${canal}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "tickets_sav" },
@@ -141,7 +142,7 @@ export function SavWorkspace({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [supabase, loadTickets]);
+  }, [supabase, loadTickets, canal]);
 
   useEffect(() => {
     void (async () => {
@@ -219,7 +220,7 @@ export function SavWorkspace({
   }) {
     if (!canMutate) return { error: "Permission refusée." };
     const { error } = await supabase.from("tickets_sav").insert({
-      canal: "email",
+      canal,
       statut: "ouvert",
       etat: "actif",
       client_nom: payload.client_nom || null,
@@ -338,8 +339,15 @@ export function SavWorkspace({
       </div>
     );
 
-  return (<div className="flex h-full min-h-0 flex-col bg-card">
-      <div className="flex shrink-0 items-center justify-end gap-2 border-b border-border px-3 py-2">
+  const canalLabel = canal === "email" ? "email" : "WhatsApp";
+  const viaLabel = canal === "email" ? "Email" : "WhatsApp";
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-card">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
+        <h1 className="text-sm font-semibold tracking-tight text-foreground">
+          {canal === "email" ? "SAV Email" : "SAV WhatsApp"}
+        </h1>
         <Button
           type="button"
           size="sm"
@@ -351,43 +359,7 @@ export function SavWorkspace({
         </Button>
       </div>
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex shrink-0 border-b border-border">
-          <button
-            type="button"
-            className={cn(
-              "flex-1 py-2 text-center text-xs",
-              canal === "email"
-                ? "border-b-2 border-primary font-medium text-primary"
-                : "text-muted-foreground"
-            )}
-            onClick={() => setCanal("email")}
-          >
-            Email
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "flex-1 py-2 text-center text-xs",
-              canal === "whatsapp"
-                ? "border-b-2 border-primary font-medium text-primary"
-                : "text-muted-foreground"
-            )}
-            onClick={() => setCanal("whatsapp")}
-          >
-            WhatsApp
-          </button>
-        </div>
-        {(() => {
-          if (canal !== "email") {
-            return (
-              <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-sm text-muted-foreground">
-                Canal WhatsApp — à brancher sur{" "}
-                <code className="mx-1 text-foreground">tickets_sav</code> (canal = whatsapp).
-              </div>
-            );
-          }
-          return (
-            <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 flex-1">
         <div
           className={cn(
             "flex w-full shrink-0 flex-col border-r border-border md:w-[240px]",
@@ -487,7 +459,7 @@ export function SavWorkspace({
                           <div className="truncate text-[11px] text-muted-foreground">{t.sujet ?? "Sans objet"}</div>
                           <div className="mt-1 flex items-center gap-1">
                             <Badge variant="blue" className="text-[9px]">
-                              email
+                              {canalLabel}
                             </Badge>
                             {t.etat ? (
                               <span className="text-[10px] text-muted-foreground">{t.etat}</span>
@@ -580,7 +552,8 @@ export function SavWorkspace({
             </div>
           </div>
           <div className="border-b border-border px-3.5 py-1.5 text-[11px] text-muted-foreground">
-            Canal email — assignation Sarah / Leo. Temps réel activé sur <code className="text-foreground">tickets_sav</code>.
+            Canal {canalLabel} — assignation Sarah / Leo. Temps réel activé sur{" "}
+            <code className="text-foreground">tickets_sav</code>.
           </div>
           <ScrollArea className="min-h-0 flex-1 p-3">
             {!selected ? (
@@ -686,7 +659,7 @@ export function SavWorkspace({
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <span className="ml-auto text-[10px] text-muted-foreground">via Email</span>
+              <span className="ml-auto text-[10px] text-muted-foreground">via {viaLabel}</span>
             </div>
           </div>
         </div>
@@ -712,15 +685,15 @@ export function SavWorkspace({
           </SheetContent>
         </Sheet>
       </div>
-          );
-        })()}
       </div>
 
       <SavNewTicketDialog
+        title={canal === "email" ? "Nouveau ticket email" : "Nouveau ticket WhatsApp"}
         open={newOpen}
         onOpenChange={setNewOpen}
         onCreated={() => void loadTickets()}
         createTicket={createTicket}
       />
-    </div>);
+    </div>
+  );
 }

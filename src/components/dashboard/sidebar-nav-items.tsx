@@ -75,8 +75,15 @@ export function SidebarNavItems({
                     ) : null}
                   </span>
                 ) : (
-                  <span className={iconClass} aria-hidden>
-                    {item.icon}
+                  <span className="relative inline-flex shrink-0">
+                    <span className={iconClass} aria-hidden>
+                      {item.icon}
+                    </span>
+                    {sidebarCollapsed && item.badge != null && item.badge > 0 ? (
+                      <span className="pointer-events-none absolute -right-1.5 -top-1 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-bold leading-none text-primary-foreground">
+                        {item.badge > 99 ? "99+" : item.badge}
+                      </span>
+                    ) : null}
                   </span>
                 )}
                 {!sidebarCollapsed ? (
